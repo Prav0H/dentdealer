@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Dent Dealer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b6fd8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dent Dealer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<script>var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});</script>
+<style>
+:root{
+  --bg:#f4f6fa;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;
+  --pri:#3b6fd8;--pri-soft:#e3ecfb;--ok:#2f9e6b;--ok-soft:#ddf3e8;--warn:#c07a12;--warn-soft:#fdf0d9;
+  --bad:#c94141;--bad-soft:#fbe3e3;--vio-soft:#ece6fb;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+.wrap{max-width:900px;margin:0 auto;padding:0 12px 96px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 12px 8px;border-bottom:1px solid var(--line)}
+.hrow{max-width:900px;margin:0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:17px}
+.who{color:var(--mute);font-size:13px}
+.sp{flex:1}
+.month{display:flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.month button{border:0;background:none;padding:6px 10px;font-size:18px;cursor:pointer}
+.month span{min-width:118px;text-align:center;font-weight:600}
+select,input,textarea{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
+textarea{min-height:70px;resize:vertical}
+label.f{display:block;margin:10px 0 0;font-size:13px;color:var(--mute)}
+label.f>input,label.f>select,label.f>textarea{margin-top:4px}
+.chk{display:flex;align-items:center;gap:8px;margin-top:12px}
+.chk input{width:20px;height:20px}
+.btn{border:0;border-radius:10px;padding:10px 14px;background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
+.btn.sec{background:var(--pri-soft);color:var(--pri)}
+.btn.ghost{background:none;color:var(--mute);border:1px solid var(--line)}
+.btn.bad{background:var(--bad-soft);color:var(--bad)}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
+.card h3{margin:0 0 8px;font-size:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.stat b{display:block;font-size:20px}
+.stat small{color:var(--mute)}
+.bar{display:flex;gap:8px;align-items:center;margin:12px 0}
+.bar input{flex:1}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;cursor:pointer}
+.item .t{display:flex;gap:8px;align-items:baseline}
+.item .t b{flex:1}
+.item .s{color:var(--mute);font-size:13px;margin-top:2px;white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{font-size:12px;padding:2px 8px;border-radius:20px;background:var(--pri-soft);color:var(--pri)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}.tag.vio{background:var(--vio-soft);color:#6a4fc4}.tag.gray{background:#eef0f3;color:var(--mute)}
+.empty{color:var(--mute);text-align:center;padding:30px 10px}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;max-width:150px;border:0;background:none;padding:8px 2px 10px;color:var(--mute);font-size:12px;cursor:pointer}
+nav button i{display:block;font-style:normal;font-size:20px;line-height:1.2}
+nav button.on{color:var(--pri);font-weight:600}
+.modal{position:fixed;inset:0;z-index:10;background:rgba(15,23,42,.35);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.modal{align-items:center}.sheet{border-radius:18px}}
+.sheet h2{margin:0 0 6px;font-size:18px;display:flex;align-items:center}
+.sheet h2 span{flex:1}
+.x{border:0;background:none;font-size:24px;color:var(--mute);cursor:pointer}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sug{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:240px;overflow:auto}
+.sug div{padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+.sug div:last-child{border:0}
+.sug small{color:var(--mute)}
+.line{display:grid;grid-template-columns:1fr 64px 64px 28px;gap:6px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px}
+.line input,.line select{padding:6px;text-align:center}
+.line .nm{font-size:13px}.line .nm small{color:var(--mute);display:block}
+.line button{border:0;background:none;color:var(--bad);font-size:18px;cursor:pointer}
+.total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:12px;background:var(--pri-soft);border-radius:12px;font-weight:600}
+.acts{display:flex;gap:8px;margin-top:16px}
+.acts .btn{flex:1}
+.prog{margin:12px 0}
+.prog .h{display:flex;justify-content:space-between;font-size:14px}
+.prog .h b{font-weight:600}
+.track{height:10px;background:#e9edf3;border-radius:6px;overflow:hidden;margin-top:6px}
+.track i{display:block;height:100%;background:var(--pri);border-radius:6px}
+.track i.ok{background:var(--ok)}.track i.warn{background:#e0a33a}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mute);font-weight:500;font-size:12px}
+td.n,th.n{text-align:right;white-space:nowrap}
+.scroll{overflow-x:auto}
+.task{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
+.task input[type=checkbox]{width:22px;height:22px;flex:none;margin-top:1px}
+.task .b{flex:1;cursor:pointer}
+.task.done .b>div:first-child{text-decoration:line-through;color:var(--mute)}
+.sec-t{font-size:13px;color:var(--mute);margin:16px 2px 6px;text-transform:uppercase;letter-spacing:.04em}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .card{width:100%;max-width:340px;text-align:center;padding:24px}
+#login input{text-align:center;font-size:24px;letter-spacing:.3em;margin:16px 0}
+.logo{width:56px;height:56px;border-radius:16px;background:var(--pri);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:22px}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 16px;border-radius:10px;z-index:20;font-size:14px;max-width:90vw}
+.toast.err{background:var(--bad)}
+.load{position:fixed;top:0;left:0;right:0;height:3px;z-index:30;background:linear-gradient(90deg,transparent,var(--pri),transparent);background-size:50% 100%;animation:ld 1s linear infinite}
+@keyframes ld{from{background-position:-50% 0}to{background-position:150% 0}}
+.code{font-family:ui-monospace,Consolas,monospace;letter-spacing:.1em}
+.note{font-size:13px;color:var(--mute);margin-top:8px}
+.item.saving{opacity:.7}
+button.tag{border:0;cursor:pointer;font:inherit;font-size:12px}
+.menu{position:fixed;z-index:15;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.15);padding:4px;min-width:150px}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:8px;cursor:pointer}
+.menu button:hover,.menu button.on{background:var(--pri-soft);color:var(--pri)}
+.seg{display:flex;background:#e9edf3;border-radius:10px;padding:3px;margin:12px 0}
+.seg button{flex:1;border:0;background:none;padding:8px;border-radius:8px;cursor:pointer;color:var(--mute);font-weight:600}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.kanban{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;margin:0 -12px;padding-left:12px;padding-right:12px}
+.kcol{flex:0 0 86%;max-width:340px;scroll-snap-align:start;background:#eaeef4;border-radius:14px;padding:10px;min-height:200px}
+@media(min-width:900px){.kcol{flex:1 1 0;max-width:none}}
+.kcol h4{margin:2px 4px 10px;font-size:14px;display:flex;justify-content:space-between;color:var(--mute)}
+.kcol.over{outline:2px dashed var(--pri)}
+.kcard{background:var(--card);border-radius:12px;padding:10px 10px 8px;margin-bottom:8px;border-left:4px solid #cbd5e1;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.kcard.p-high{border-left-color:var(--bad)}.kcard.p-low{border-left-color:#9ec5a8}
+.kcard .kt{font-size:14px}
+.kmove{display:flex;gap:6px;margin-top:8px}
+.kmove button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:5px;font-size:12px;cursor:pointer;color:var(--mute)}
+.mic{border:0;border-radius:50%;width:44px;height:44px;background:var(--pri-soft);color:var(--pri);font-size:20px;cursor:pointer;flex:none}
+.mic.rec{background:var(--bad);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+.kb-text{white-space:pre-wrap;line-height:1.5;font-size:15px}
+mark{background:#fff3b0;border-radius:3px;padding:0 1px}
+.lesson{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.lesson .ok{color:var(--ok);font-weight:700;width:18px}
+.qa{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="ld" class="load hidden"></div>
+
+<div id="login" class="hidden">
+  <div class="card">
+    <div class="logo">DD</div>
+    <h2 style="margin:12px 0 0">Dent Dealer</h2>
+    <div class="note">Введите личный код сотрудника</div>
+    <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="3" placeholder="•••">
+    <button class="btn" style="width:100%" onclick="doLogin()">Войти</button>
+    <div id="lerr" class="note" style="color:var(--bad)"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="hrow">
+      <div><div class="brand">Dent Dealer</div><div class="who" id="who"></div></div>
+      <div class="sp"></div>
+      <div class="month"><button onclick="shiftMonth(-1)">‹</button><span id="mon"></span><button onclick="shiftMonth(1)">›</button></div>
+      <select id="mgr" class="hidden" style="width:auto;min-width:130px" onchange="S.mgr=this.value;render()"></select>
+      <button class="btn ghost sm" onclick="showTg()" title="Telegram">🔔</button>
+      <button class="btn ghost sm" onclick="showMyLink()" title="Вход без кода">🔗</button>
+      <button class="btn ghost sm" onclick="doLogout()">Выйти</button>
+    </div>
+  </header>
+  <div class="wrap" id="view"></div>
+  <nav id="nav"></nav>
+</div>
+
+<div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()"><div class="sheet" id="sheet"></div></div>
+
+<script>
+// Экран берёт все данные месяца одним запросом (bundle) и хранит их в памяти и в телефоне:
+// разделы переключаются без ожидания, сохранение идёт в фоне.
+var URLKEY = /*KEY*/''; // ключ из личной ссылки ?k=… (подставляет сервер)
+var GAS = !!(window.google && google.script && google.script.run); // открыта из Google; иначе — страница на GitHub, запросы идут на API_URL
+if (!URLKEY && !GAS) { try { URLKEY = (new URLSearchParams(location.search).get('k') || '').replace(/[^\w-]/g, ''); } catch(e){} }
+var S = { token: '', me: null, team: [], price: [], rate: 105, today: '', month: '', mgr: '', tab: 'orders', data: null, cache: {} };
+var MON = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+var STATUSES = ['Создан','Собран','Доставлен'];
+var PM = [['calls','Звонки с новыми лидами'],['warm','Встречи с тёплыми клиентами'],['cold','Встречи с холодными клиентами'],['deals','Заключённые договоры'],['sum','Сумма заказов']];
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Копейки показываем, если они есть: 16 547,4 → «16 547,40 ₽».
+function money(n){ var v = Math.round((+n||0)*100)/100; return v.toLocaleString('ru-RU',{minimumFractionDigits: v%1 ? 2 : 0, maximumFractionDigits:2}) + ' ₽'; }
+function pct(n){ return Math.round((+n||0)*1000)/10 + '%'; }
+function localToday(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dmy(s){ return s ? s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4) : ''; }
+function num(v){ var n=parseFloat(String(v||'').replace(/\s/g,'').replace(',','.')); return isNaN(n)?0:n; }
+function store(k,v){ try{ if(v===undefined) return localStorage.getItem(k); if(v===null) localStorage.removeItem(k); else localStorage.setItem(k,v); }catch(e){ return null; } }
+var loading = 0;
+function busy(d){ loading += d; $('ld').classList.toggle('hidden', loading <= 0); }
+function toast(msg, err){ var t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg; document.body.appendChild(t); setTimeout(function(){ t.remove(); }, err?4500:1800); }
+
+// Вызов функции сервера: из Google — google.script.run, со страницы GitHub — запрос POST {fn, args}.
+function run(fn, args){
+  if (GAS) return new Promise(function(res, rej){ var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });
+  return fetch(API_URL, {method:'POST', body: JSON.stringify({fn:fn, args:args})})
+    .catch(function(){ throw new Error('Нет связи с сервером'); })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if (j.err) throw new Error(j.err); return j.res; });
+}
+function api(fn){
+  var args = Array.prototype.slice.call(arguments,1);
+  busy(1);
+  return run(fn, fn === 'login' ? [args[0]] : [S.token].concat(args)).then(function(x){ busy(-1); return x; }, function(e){
+    busy(-1);
+    var m = String(e && e.message || e).replace(/^Error:\s*/,'').replace(/^Exception:\s*/,'');
+    if (m.indexOf('AUTH') >= 0){ store('dd_tok', null); showLogin(); throw new Error('Войдите заново'); }
+    toast(m, true); throw new Error(m);
+  });
+}
+// Сохранение в фоне: экран уже обновлён, при ошибке — сообщение и свежие данные с сервера.
+function bg(fn){
+  var args = Array.prototype.slice.call(arguments);
+  return api.apply(null, args).then(function(x){ refresh(); return x; }).catch(function(){ refresh(); });
+}
+
+// ---------- данные ----------
+function key(){ return 'dd_data_' + (S.me ? S.me.name : '') + '_' + S.month; }
+function setData(d){
+  S.cache[d.month] = d;
+  if (d.month === S.month){ S.data = d; try { store(key(), JSON.stringify(d)); } catch(e){} }
+}
+// Свежие данные текущего месяца с сервера, без «Загрузка…» на экране.
+var reqNo = 0;
+function refresh(){
+  var month = S.month, no = ++reqNo;
+  return api('bundle', month).then(function(d){
+    var same = S.cache[month] && JSON.stringify(S.cache[month]) === JSON.stringify(d);
+    setData(d);
+    // не перерисовываем, если ничего не изменилось, открыта форма или человек печатает
+    var a = document.activeElement, typing = a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.id !== 'q' && $('view').contains(a);
+    if (no === reqNo && month === S.month && !same && $('modal').classList.contains('hidden') && !typing) render();
+  }).catch(function(){});
+}
+function useMonth(){
+  S.data = S.cache[S.month] || null;
+  if (!S.data){ try { var j = store(key()); if (j) S.data = S.cache[S.month] = JSON.parse(j); } catch(e){} }
+  render();
+  refresh();
+}
+
+// ---------- вход ----------
+function showLogin(){ $('app').classList.add('hidden'); $('login').classList.remove('hidden'); closeModal(); setTimeout(function(){ $('code').focus(); }, 50); }
+// Telegram: подключение своего аккаунта к боту программы.
+function showTg(){
+  var tg = S.tg || {};
+  if (!tg.bot){
+    openModal('<h2><span>Telegram</span><button class="x" onclick="closeModal()">×</button></h2><div style="line-height:1.5">Бот ещё не подключён.'+(S.me.boss?' Вставьте токен бота во вкладке «Команда» → «Telegram-бот».':' Его подключает руководитель.')+'</div>');
+    return;
+  }
+  api('tgLink').then(function(url){
+    openModal('<h2><span>Telegram</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      '<div style="line-height:1.5">'+(tg.linked?'✅ Telegram уже подключён. Можно подключить заново, например с нового телефона.<br><br>':'')+
+      'Бот <b>@'+esc(tg.bot)+'</b> будет присылать новые задачи и утреннюю сводку в 9:00. А если написать боту сообщение — он создаст вам задачу.<br><br>Нажмите кнопку, откроется Telegram — нажмите там «Запустить» (Start).</div>'+
+      '<div class="acts"><a class="btn" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="'+esc(url)+'">Подключить Telegram</a></div>');
+  }).catch(function(){});
+}
+function saveTgToken(){
+  var v = $('tg_token').value.trim();
+  if (!v){ toast('Вставьте токен', true); return; }
+  toast('Проверяю токен…');
+  api('setTelegram', v).then(function(bot){ S.tg = {bot: bot, linked: S.tg && S.tg.linked}; $('tg_token').value=''; toast('Бот @'+bot+' подключён'); render(); }).catch(function(){});
+}
+
+// Личная ссылка: открыв её один раз и добавив на экран «Домой», код больше вводить не нужно.
+function showMyLink(){
+  (GAS ? api('myLink') : Promise.resolve(location.origin + location.pathname + '?k=' + S.token)).then(function(url){
+    openModal('<h2><span>Вход без кода</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      '<div style="line-height:1.5">Это ваша личная ссылка. Откройте её и добавьте на экран «Домой» — программа будет открываться сразу, без кода.<br><br>'+
+      '<b>iPhone:</b> откройте ссылку в Safari → кнопка «Поделиться» → «На экран Домой».<br><b>Android:</b> откройте в Chrome → меню ⋮ → «Добавить на главный экран».<br><br>'+
+      '<span style="color:var(--bad)">Не пересылайте ссылку: по ней входят под вашим именем.</span></div>'+
+      '<div class="acts"><button class="btn ghost" onclick="closeModal()">Позже</button><a class="btn" style="text-decoration:none;text-align:center" target="_top" href="'+esc(url)+'">Открыть мою ссылку</a></div>');
+  }).catch(function(){});
+}
+function doLogin(){
+  var c = $('code').value.trim(); $('lerr').textContent='';
+  if(!c) return;
+  api('login', c).then(function(tok){ S.token = tok; store('dd_tok', tok); start(); setTimeout(showMyLink, 1500); }).catch(function(e){ $('lerr').textContent = e.message; });
+}
+$('code').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); S.token=''; S.cache={}; $('code').value=''; showLogin(); }
+
+function applyBoot(b){
+  S.tg=b.tg||{bot:'', linked:false};
+  S.me=b.me; S.team=b.team; S.sales=b.sales||b.team; S.rate=b.rate||105; S.rateTrade=b.rateTrade||102; S.today=localToday();
+  if (b.price){ S.price=b.price; try { store('dd_price', JSON.stringify({ver:b.priceVer, items:b.price})); } catch(e){} }
+  else if (!S.price || !S.price.length){ try { S.price = JSON.parse(store('dd_price')||'{}').items || []; } catch(e){ S.price=[]; } }
+  S.month = S.month || b.today.slice(0,7);
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  $('who').textContent = b.me.name + ' · ' + b.me.role;
+  var sel = $('mgr');
+  sel.classList.toggle('hidden', !b.me.boss);
+  sel.innerHTML = '<option value="">Все сотрудники</option>' + b.team.map(function(n){ return '<option>'+esc(n)+'</option>'; }).join('');
+  sel.value = S.mgr;
+  // вкладки по роли: склад и курьер — только заказы (сборка/доставка), задачи и регламенты
+  var ordLabel = b.me.role==='Кладовщик' ? 'Сборка' : b.me.role==='Курьер' ? 'Доставка' : 'Заказы';
+  var tabs = b.me.role==='Стажёр' ? [['learn','🎓','Обучение']] : [['orders','📦',ordLabel]];
+  if (b.me.edit) tabs.push(['clients','🏥','Клиенты']);
+  tabs.push(['tasks','✅','Задачи']);
+  if (b.me.sales) tabs.push(['stats','🎯','Итоги']);
+  tabs.push(['kb','📚','База']);
+  if (b.me.role!=='Стажёр') tabs.push(['learn','🎓','Обучение']);
+  if (b.me.boss) tabs.push(['team','👥','Команда']);
+  $('nav').innerHTML = tabs.map(function(t){ return '<button data-t="'+t[0]+'" onclick="go(\''+t[0]+'\')"><i>'+t[1]+'</i>'+t[2]+'</button>'; }).join('');
+  var t = store('dd_tab') || 'orders';
+  if (t==='salary' || t==='plan') t = 'stats';
+  S.tab = (t==='team' && !b.me.boss) || !tabs.some(function(x){ return x[0]===t; }) ? tabs[0][0] : t;
+  markTab();
+}
+function start(){
+  // сначала — то, что сохранено в телефоне (экран появляется сразу), потом свежее с сервера
+  var saved = null;
+  try { saved = JSON.parse(store('dd_boot') || 'null'); } catch(e){}
+  if (saved){ applyBoot(saved); useMonthLocal(); }
+  api('boot', priceVer()).then(function(b){
+    var d = b.data; delete b.data;
+    var lite = Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite));
+    var first = !S.me;
+    applyBoot(b);
+    if (d.month === S.month) setData(d);
+    if (first || d.month === S.month) render(); else useMonth();
+  }).catch(function(){});
+}
+function priceVer(){ try { return JSON.parse(store('dd_price')||'{}').ver || ''; } catch(e){ return ''; } }
+// курс € для формы заказа: торгующей компании — свой
+function rate(){ return $('f_trade') && $('f_trade').checked ? S.rateTrade : S.rate; }
+function useMonthLocal(){
+  try { var j = store(key()); if (j) S.data = S.cache[S.month] = JSON.parse(j); } catch(e){}
+  render();
+}
+function markTab(){
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function(b){ b.classList.toggle('on', b.dataset.t===S.tab); });
+}
+function go(t){
+  if (t==='team' && !S.me.boss) t='orders';
+  S.tab=t; store('dd_tab', t); markTab(); render();
+}
+function shiftMonth(d){
+  var y=+S.month.slice(0,4), m=+S.month.slice(5,7)-1+d;
+  y += Math.floor(m/12); m = (m%12+12)%12;
+  S.month = y+'-'+String(m+1).padStart(2,'0'); Q=''; useMonth();
+}
+function render(){
+  if (!S.me) return;
+  $('mon').textContent = MON[+S.month.slice(5,7)-1] + ' ' + S.month.slice(0,4);
+  if (!S.data){ $('view').innerHTML = '<div class="empty">Загрузка…</div>'; return; }
+  var y = window.scrollY;
+  ({orders:vOrders, clients:vClients, tasks:vTasks, stats:vStats, kb:vKb, team:vTeam, learn:vLearn})[S.tab]();
+  attBar();
+  if (S.tab !== S.lastTab){ window.scrollTo(0,0); S.lastTab = S.tab; } else window.scrollTo(0,y);
+}
+// ---------- табель: «Я на работе» ----------
+function attToday(){ var a = S.data && S.data.att; return a && a.d === S.today ? a : null; }
+function hmNow(){ var d = new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+// Сверху экрана: утром — «Я на работе», с 17:00 — напоминание об отчёте (отчёт = конец рабочего дня).
+function attBar(){
+  var a = attToday(), hm = a && a.me, end = a && a.end;
+  $('who').textContent = S.me.name + ' · ' + S.me.role + (hm ? ' · на работе с ' + hm : '') + (end ? ' · отчёт ' + end : '');
+  if (!S.data || !S.data.att) return;
+  var bar = function(text, btn){ $('view').insertAdjacentHTML('afterbegin', '<div class="card" style="display:flex;align-items:center;gap:10px"><span style="flex:1">'+text+'</span>'+btn+'</div>'); };
+  if (!hm) bar('Вы ещё не отметились сегодня', '<button class="btn" onclick="checkIn()">🟢 Я на работе</button>');
+  else if (!end && hmNow() >= '17:00') bar('Конец дня — отправьте отчёт', S.me.sales
+    ? (S.tab==='stats' && (S.statTab||'plan')==='plan' ? '' : '<button class="btn" onclick="S.statTab=\'plan\';go(\'stats\')">📝 Отчёт за день</button>')
+    : '<button class="btn" onclick="endDay()">🏁 День завершён</button>');
+}
+function setAtt(k, hm){ var a = Object.assign({}, S.data.att); if (a.d !== S.today){ a.d = S.today; a.me = ''; a.end = ''; } if (!a[k]) a[k] = hm; S.data.att = a; }
+// Закрыть свою задачу на экране сразу (сервер закроет её сам и поставит следующую).
+function doneLocal(text){
+  S.data.tasks.forEach(function(t){ if (t.emp===S.me.name && t.text===text && t.status!=='Готово' && (!t.due || t.due<=S.today)){ t.status='Готово'; t.done=S.today; } });
+}
+function checkIn(){
+  var hm = hmNow(); setAtt('me', hm);
+  doneLocal('Отметиться'); render(); toast('Отмечено: на работе с '+hm);
+  bg('checkIn');
+}
+function endDay(){
+  var hm = hmNow(); setAtt('end', hm);
+  doneLocal('Выслать отчёт'); render(); toast('Отчёт отмечен в '+hm);
+  bg('endDay');
+}
+// Сотрудник, чьи данные смотрим (для менеджера — он сам)
+function cur(){ return S.me.boss ? S.mgr : S.me.all ? '' : S.me.name; }
+function pickHint(what){
+  return '<div class="card empty">Выберите сотрудника, чтобы увидеть '+what+'.<br><br>' +
+    S.team.map(function(n){ return '<button class="btn sec sm" style="margin:3px" onclick="pick(\''+esc(n)+'\')">'+esc(n)+'</button>'; }).join('') + '</div>';
+}
+function pick(n){ S.mgr=n; $('mgr').value=n; render(); }
+
+// ---------- заказы ----------
+var Q = '', QR = null, QKEY = '';
+// заказы за всё время нужны для поиска, «Не оплачены» и периода — их берём с сервера
+function remoteKey(){ var all = S.of==='unpaid' && S.unpaidAll; return Q || all || S.range ? [cur(), Q, S.of==='unpaid', S.range&&S.range.from, S.range&&S.range.to].join('|') : ''; }
+function vOrders(){
+  var v=$('view'), keepFocus = document.activeElement && document.activeElement.id==='q';
+  if (S.of === undefined) S.of = S.me.role==='Кладовщик' ? 'Создан' : S.me.role==='Курьер' ? 'Собран' : '';
+  var chips = '<div class="seg" style="flex-wrap:wrap">'+OFILTERS().map(function(c){
+    return '<button class="'+(S.of===c[0]?'on':'')+'" onclick="S.of=\''+c[0]+'\';refreshList();vOrdersChips()">'+c[1]+'</button>'; }).join('')+
+    '<button class="'+(S.range?'on':'')+'" onclick="pickRange()">📅 '+(S.range?esc(rangeLabel()):'Период')+'</button></div>';
+  v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск по всем месяцам: клиент, артикул, счёт" value="'+esc(Q)+'">'+(S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+'</div><div id="ochips">'+chips+'</div><div id="ost"></div><div class="list" id="olist"></div>';
+  var t; $('q').oninput=function(){ clearTimeout(t); t=setTimeout(function(){ Q=$('q').value.trim(); refreshList(); },400); };
+  if (keepFocus){ var q=$('q'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+  drawOrders();
+}
+function refreshList(){
+  var k = remoteKey();
+  if (!k){ QR=null; QKEY=''; drawOrders(); return; }
+  if (k === QKEY && QR){ drawOrders(); return; }
+  QKEY = k; QR = null;
+  if ($('olist')) $('olist').innerHTML = '<div class="empty">Загружаю…</div>';
+  api('getOrders', {mgr: cur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
+}
+function rangeLabel(){ var r=S.range; return (r.from?dmy(r.from).slice(0,5):'…')+'–'+(r.to?dmy(r.to).slice(0,5):'…'); }
+function isoOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function pickRange(){
+  var r = S.range || {from:'', to:''}, t = new Date(S.today+'T00:00:00');
+  var wk = new Date(t); wk.setDate(t.getDate()-((t.getDay()+6)%7));
+  var presets = [['Сегодня', S.today, S.today], ['Эта неделя', isoOf(wk), S.today], ['Этот месяц', S.today.slice(0,8)+'01', S.today],
+    ['Прошлый месяц', isoOf(new Date(t.getFullYear(), t.getMonth()-1, 1)), isoOf(new Date(t.getFullYear(), t.getMonth(), 0))]];
+  openModal('<h2><span>Заказы за период</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="tags" style="margin-bottom:6px">'+presets.map(function(p){ return '<button class="tag" onclick="setRange(\''+p[1]+'\',\''+p[2]+'\')">'+p[0]+'</button>'; }).join('')+'</div>'+
+    '<div class="row2"><label class="f">С<input type="date" id="rg_from" value="'+r.from+'"></label><label class="f">По<input type="date" id="rg_to" value="'+r.to+'"></label></div>'+
+    '<div class="acts"><button class="btn ghost" onclick="setRange(\'\',\'\')">Сбросить</button><button class="btn" onclick="setRange($(\'rg_from\').value,$(\'rg_to\').value)">Показать</button></div>');
+}
+function setRange(f, t){ S.range = (f||t) ? {from:f, to:t} : null; closeModal(); render(); refreshList(); }
+function ordersNow(){
+  var mgr = cur();
+  var list = remoteKey() ? (QR||[]) : S.data.orders;
+  return mgr ? list.filter(function(o){ return o.mgr===mgr; }) : list;
+}
+function drawOrders(){
+  if (!$('olist')) return;
+  if (remoteKey() && !QR){ if (QKEY !== remoteKey()) refreshList(); return; }
+  var list = ordersNow(), mgr = cur();
+  if (S.of === 'unpaid') list = list.filter(function(o){ return !o.paid; });
+  else if (S.of) list = list.filter(function(o){ return (o.status||'Создан')===S.of; });
+  S.orders = list;
+  var sum=0, paid=0, bonus=0;
+  list.forEach(function(o){ sum+=o.sum; if(o.paid){ paid+=o.sum; if(o.bonus) bonus+=o.bonus.sum; } });
+  $('ost').innerHTML = '<div class="stats"><div class="stat"><small>Заказов</small><b>'+list.length+'</b></div><div class="stat"><small>На сумму</small><b>'+money(sum)+'</b></div><div class="stat"><small>Оплачено</small><b>'+money(paid)+'</b></div>'+
+    (mgr&&S.me.sales?'<div class="stat"><small>'+(S.of==='unpaid'?'Бонус после оплаты':'Бонус с оплаченных')+'</small><b>'+money(S.of==='unpaid'?list.reduce(function(a,o){ return a+(o.bonus?o.bonus.sum:0); },0):bonus)+'</b></div>':'')+'</div>' +
+    (S.of==='unpaid'&&!Q&&!S.range?'<div class="note" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(S.unpaidAll?'Неоплаченные за всё время':'Неоплаченные за '+MON[+S.month.slice(5,7)-1].toLowerCase())+
+      ' <button class="btn sec sm" onclick="S.unpaidAll=!S.unpaidAll;render();refreshList()">'+(S.unpaidAll?'Только этот месяц':'За всё время')+'</button></div>':
+     Q?'<div class="note">Найдено по всем месяцам</div>':S.range?'<div class="note">За период '+esc(rangeLabel())+'</div>':'');
+  $('olist').innerHTML = list.length ? list.map(function(o,i){
+    var st = o.status==='Доставлен'?'ok':o.status==='Собран'?'vio':'gray';
+    return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
+      '<div class="s">'+dmy(o.date)+(S.me.boss&&!mgr?' · '+esc(o.mgr):'')+(o.dlv?' · доставка '+money(o.dlv):'')+' · '+esc(o.order)+'</div><div class="tags">'+
+      (o.saving?'<span class="tag">сохраняется…</span>':'')+
+      '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+esc(o.status||'Создан')+' ▾</button>'+
+      (S.me.edit?'<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>':(o.paid?'<span class="tag ok">Оплачен</span>':''))+
+      (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
+      (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
+  }).join('') : '<div class="empty">Заказов нет</div>';
+}
+
+// Телефоны из текста: «Руслан +7 925 530-32-37» → [{label, num}]
+function phonesOf(text){
+  var out = [], seen = {};
+  String(text||'').split(/\n|;/).forEach(function(line){
+    (line.match(/(?:\+7|8|7)[\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}/g) || []).forEach(function(p){
+      var d = p.replace(/\D/g,''); if (d.length===11 && d[0]==='8') d = '7'+d.slice(1);
+      if (seen[d]) return; seen[d] = 1;
+      var label = line.replace(p,'').replace(/[:,\-–]+\s*$/,'').replace(/(тел\.?|телефон|контакт)\s*/i,'').trim().slice(0,30);
+      out.push({label: label, num: '+'+d, show: p.trim()});
+    });
+  });
+  return out;
+}
+function callButtons(text){
+  return phonesOf(text).slice(0,6).map(function(p){ return '<a class="btn sec" style="text-decoration:none;text-align:center" href="tel:'+p.num+'">📞 '+esc(p.label||p.show)+'</a>'; }).join('');
+}
+// маршрут в Яндекс Картах от текущего места до адреса
+function routeButton(addr){
+  var first = String(addr||'').split('\n')[0].replace(/(\+7|8)[\d\s\-()]{9,}/g,'').trim();
+  if (!first || /самовывоз/i.test(first)) return '';
+  return '<a class="btn sec" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://yandex.ru/maps/?rtext=~'+encodeURIComponent(first)+'&rtt=auto">🗺 Маршрут</a>';
+}
+
+// Карточка заказа для склада и курьера: адрес, маршрут, звонок, состав и кнопки статуса.
+// фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
+function OFILTERS(){ var w = !S.me.edit; return [['','Все'],['unpaid','Не оплачены'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
+function vOrdersChips(){ Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ b.classList.toggle('on', OFILTERS()[k][0]===S.of); }); }
+function viewOrder(i){
+  var o = S.orders[i], first = (o.addr||'').split('\n')[0];
+  var phones = (o.addr+' '+o.comment).match(/\+?[78][\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}/g) || [];
+  openModal('<h2><span>'+esc(o.client)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="tags" style="margin:0 0 10px"><span class="tag gray">'+dmy(o.date)+'</span><span class="tag">'+esc(o.status||'Создан')+'</span>'+(o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>')+'<span class="tag gray">'+esc(o.mgr)+'</span>'+(o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+'</div>'+
+    '<div class="card" style="margin-top:0"><div class="note" style="margin:0 0 4px">Адрес и контакты</div><div style="white-space:pre-line">'+esc(o.addr||'—')+'</div>'+
+    '<div class="acts" style="margin-top:10px;flex-wrap:wrap">'+routeButton(o.addr)+callButtons(o.addr+'\n'+o.comment)+'</div></div>'+
+    '<div class="card"><div class="note" style="margin:0 0 4px">Состав заказа</div><div style="white-space:pre-line">'+esc(o.order)+'</div>'+
+    (o.comment?'<div class="note">Комментарий: '+esc(o.comment)+'</div>':'')+(o.cdek?'<div class="note">СДЭК: '+esc(o.cdek)+'</div>':'')+'</div>'+
+    '<div class="sec-t">Поставить статус</div><div class="acts" style="margin-top:0">'+STATUSES.map(function(s){
+      return '<button class="btn '+(s===(o.status||'Создан')?'':'sec')+'" onclick="closeModal();setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('')+'</div>');
+}
+
+// Статус и оплата — прямо в списке, без открытия заказа.
+function closeMenu(){ var m=$('menu'); if (m) m.remove(); }
+document.addEventListener('click', function(e){ if (!e.target.closest('.menu') && !e.target.closest('button.tag')) closeMenu(); });
+function statusMenu(i, ev){
+  ev.stopPropagation(); closeMenu();
+  var o = S.orders[i], r = ev.target.getBoundingClientRect(), m = document.createElement('div');
+  m.className = 'menu'; m.id = 'menu';
+  m.innerHTML = STATUSES.map(function(s){ return '<button class="'+(s===o.status?'on':'')+'" onclick="setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('');
+  document.body.appendChild(m);
+  m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 8) + 'px';
+  m.style.top = (r.bottom + m.offsetHeight + 8 > innerHeight ? r.top - m.offsetHeight - 4 : r.bottom + 4) + 'px';
+}
+function togglePaid(i, ev){ ev.stopPropagation(); setState(i, null, !S.orders[i].paid); }
+function setState(i, status, paid){
+  closeMenu();
+  var o = S.orders[i];
+  if (o.saving){ toast('Заказ ещё сохраняется, подождите пару секунд'); return; }
+  if (status !== null) o.status = status;
+  if (paid !== null) o.paid = paid;
+  drawOrders();
+  bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:o.status, paid:o.paid});
+}
+
+// Подсказка клиентов: выбрал — подставились адрес, скидка и «торгующая».
+function clientSuggest(inp, box, onPick){
+  var q = inp.value.trim().toLowerCase();
+  if (q.length < 2){ box.innerHTML=''; return; }
+  var res = (S.data.clients||[]).filter(function(c){ return c.name.toLowerCase().indexOf(q)>=0 || c.addr.toLowerCase().indexOf(q)>=0; }).slice(0,8);
+  box.innerHTML = res.length ? '<div class="sug">'+res.map(function(c){
+    return '<div data-n="'+esc(c.name)+'"><b>'+esc(c.name)+'</b>'+(c.disc?' · скидка '+pct(c.disc):'')+'<br><small>'+esc(c.addr.split('\n')[0]).slice(0,90)+'</small></div>';
+  }).join('')+'</div>' : '';
+  Array.prototype.forEach.call(box.querySelectorAll('[data-n]'), function(d){
+    d.onclick = function(){ box.innerHTML=''; onPick((S.data.clients||[]).filter(function(c){ return c.name===d.dataset.n; })[0]); };
+  });
+}
+
+var F = null; // форма заказа
+function editOrder(i, preset){
+  var o = i===undefined || i===null ? null : S.orders[i];
+  if (o && o.saving){ toast('Заказ ещё сохраняется, откройте через пару секунд'); return; }
+  S.today = localToday();
+  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'Создан', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.name };
+  if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = preset.disc; F.trade = preset.trade; }
+  F.lines=[];
+  if (o) F.orig = {mgr:o.mgr, client:o.client, date:o.date};
+  var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+S.sales.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
+  openModal('<h2><span>'+(o?'Заказ':'Новый заказ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    mgrSel+
+    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус<select id="f_status">'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></label></div>'+
+    '<label class="f">Клиент<input id="f_client" autocomplete="off" placeholder="Начните вводить название" value="'+esc(F.client)+'"></label><div id="f_csug"></div>'+
+    '<label class="f">Адрес доставки / контакты<textarea id="f_addr">'+esc(F.addr)+'</textarea></label>'+
+    '<label class="f">Товары из прайса<input id="f_find" placeholder="Артикул или название" autocomplete="off"></label><div id="f_sug"></div><div id="f_lines"></div>'+
+    '<label class="f">'+(o?'Состав заказа':'Другие товары (не из прайса)')+'<textarea id="f_order">'+esc(F.order)+'</textarea></label>'+
+    '<div class="row2"><label class="f">Скидка, %<input id="f_disc" inputmode="decimal" value="'+(Math.round(F.disc*1000)/10||'')+'"></label><label class="f">Доставка, ₽<input id="f_dlv" inputmode="decimal" placeholder="0" value="'+(F.dlv||'')+'"></label></div>'+
+    '<label class="chk"><input type="checkbox" id="f_trade"'+(F.trade?' checked':'')+'> Торгующая компания (бонус 1,5 %)</label>'+
+    '<div class="total"><span>Товары со скидкой</span><span style="display:flex;align-items:center;gap:6px"><input id="f_sum" inputmode="decimal" style="width:130px;text-align:right" value="'+((F.sum||0)-(F.dlv||0)||'')+'"> ₽</span></div>'+
+    '<div class="total" style="background:none;padding:6px 12px;margin-top:4px;font-weight:500"><span>Сумма заказа с доставкой</span><span id="f_total"></span></div>'+
+    '<div class="note">Курс € — <b id="f_rate">'+S.rate+'</b> ₽ (для торгующей компании — '+S.rateTrade+' ₽). В таблицу пишется сумма с доставкой; скидка, бонус и план считаются без доставки. Сумму товаров можно поправить вручную.</div>'+
+    '<div class="row2"><label class="f">Номер счёта<input id="f_inv" value="'+esc(F.inv)+'"></label><label class="f">Наличка<input id="f_cash" value="'+esc(F.cash)+'"></label></div>'+
+    '<label class="chk"><input type="checkbox" id="f_paid"'+(F.paid?' checked':'')+'> Оплачен</label>'+
+    '<div class="row2"><label class="f">Дата отгрузки<input type="date" id="f_ship" value="'+F.ship+'"></label><label class="f">Дата доставки<input type="date" id="f_deliv" value="'+F.deliv+'"></label></div>'+
+    '<label class="f">СДЭК<input id="f_cdek" value="'+esc(F.cdek)+'"></label>'+
+    '<label class="f">Комментарий<textarea id="f_comment">'+esc(F.comment)+'</textarea></label>'+
+    '<div class="acts">'+(o?'<button class="btn bad" onclick="delOrder()">Удалить</button>':'<button class="btn ghost" onclick="closeModal()">Отмена</button>')+'<button class="btn" onclick="saveOrder()">Сохранить</button></div>');
+  $('f_find').oninput = suggest;
+  var pickClient = function(c){
+    $('f_client').value = c.name;
+    $('f_addr').value = c.addr || lastAddr(c.name) || $('f_addr').value;
+    $('f_disc').value = c.disc ? Math.round(c.disc*1000)/10 : '';
+    $('f_trade').checked = c.trade;
+    drawLines();
+  };
+  $('f_client').oninput = function(){ clientSuggest($('f_client'), $('f_csug'), pickClient); };
+  // ввели название целиком и ушли из поля — тоже подставляем адрес и скидку
+  $('f_client').onchange = function(){
+    var v = $('f_client').value.trim().toLowerCase(), c = (S.data.clients||[]).filter(function(x){ return x.name.toLowerCase()===v; })[0];
+    if (c && !$('f_addr').value.trim()) pickClient(c);
+  };
+  ['f_disc','f_dlv','f_sum'].forEach(function(id){ $(id).addEventListener('input', id==='f_sum' ? showTotal : recalc); });
+  $('f_trade').onchange = drawLines;
+  drawLines();
+}
+// адрес из последнего заказа клиента, если в карточке пусто
+function lastAddr(name){
+  var k = String(name||'').toLowerCase(), o = (S.data.orders||[]).filter(function(x){ return x.client.toLowerCase()===k && x.addr; })[0];
+  return o ? o.addr : '';
+}
+function showTotal(){ if ($('f_total')) $('f_total').textContent = money(num($('f_sum').value) + num($('f_dlv').value)); if ($('f_rate')) $('f_rate').textContent = rate(); }
+function suggest(){
+  var q = $('f_find').value.trim().toLowerCase();
+  if (q.length<1){ $('f_sug').innerHTML=''; return; }
+  var qq = q.replace(/\s/g,'');
+  var res = S.price.filter(function(p){ return p.art.toLowerCase().replace(/\s/g,'').indexOf(qq)>=0 || (p.name+' '+p.mat+' '+p.analog).toLowerCase().indexOf(q)>=0; }).slice(0,10);
+  $('f_sug').innerHTML = res.length ? '<div class="sug">'+res.map(function(p){
+    return '<div onclick="addLine(\''+esc(p.art)+'\')"><b>'+esc(p.art)+'</b> — '+esc(p.name)+'<br><small>уп '+p.perPack+' шт: '+money(p.eurPack*rate())+' · шт: '+money(p.eur*rate())+'</small></div>';
+  }).join('')+'</div>' : '<div class="note">В прайсе не найдено — впишите товар в поле ниже</div>';
+}
+function addLine(art){
+  var p = S.price.filter(function(x){ return x.art===art; })[0];
+  F.lines.push({art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, unit:'уп', qty:1});
+  $('f_find').value=''; $('f_sug').innerHTML=''; drawLines();
+}
+function drawLines(){
+  $('f_lines').innerHTML = F.lines.map(function(l,i){
+    var pr = (l.unit==='уп'?l.eurPack:l.eur)*rate();
+    return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> '+money(pr*l.qty)+'<small>'+esc(l.name)+'</small></div>'+
+      '<input inputmode="numeric" value="'+l.qty+'" oninput="F.lines['+i+'].qty=+this.value||0;recalc(true)">'+
+      '<select onchange="F.lines['+i+'].unit=this.value;drawLines()"><option'+(l.unit==='уп'?' selected':'')+'>уп</option><option'+(l.unit==='шт'?' selected':'')+'>шт</option></select>'+
+      '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button></div>';
+  }).join('');
+  recalc();
+}
+// Сумма пересчитывается, только когда в заказе есть товары из прайса (иначе — как ввели руками).
+function recalc(keepLines){
+  if (keepLines===true){
+    var nodes=document.querySelectorAll('#f_lines .nm b');
+    F.lines.forEach(function(l,i){ var el=nodes[i]; if(el && el.nextSibling) el.nextSibling.textContent=' '+money((l.unit==='уп'?l.eurPack:l.eur)*rate()*l.qty); });
+  }
+  if (!$('f_sum')) return;
+  if (F.lines.length){
+    var base = F.lines.reduce(function(s,l){ return s + (l.unit==='уп'?l.eurPack:l.eur)*rate()*l.qty; }, 0);
+    var sum = base*(1-num($('f_disc').value)/100) + (F.row ? (F.sum||0)-(F.dlv||0) : 0); // без доставки
+    $('f_sum').value = Math.round(sum*100)/100;
+  }
+  showTotal();
+}
+function saveOrder(){
+  var lines = F.lines.filter(function(l){ return l.qty>0; }).map(function(l){ return l.art+' - '+l.qty+' '+l.unit; });
+  var txt = lines.join(', ');
+  var extra = $('f_order').value.trim();
+  var o = {
+    row: F.row, sheet: F.sheet, orig: F.orig, mgr: $('f_mgr') ? $('f_mgr').value : S.me.name,
+    date: $('f_date').value, status: $('f_status').value, client: $('f_client').value.trim(), addr: $('f_addr').value,
+    order: [extra, txt].filter(Boolean).join(extra && txt ? ', ' : ''),
+    disc: num($('f_disc').value), sum: Math.round((num($('f_sum').value) + num($('f_dlv').value))*100)/100, dlv: num($('f_dlv').value), trade: $('f_trade').checked,
+    inv: $('f_inv').value, cash: $('f_cash').value, paid: $('f_paid').checked,
+    ship: $('f_ship').value, deliv: $('f_deliv').value, cdek: $('f_cdek').value, comment: $('f_comment').value
+  };
+  if (!o.client){ toast('Укажите клиента', true); return; }
+  if (!o.order.trim()){ toast('Добавьте товары', true); return; }
+  // сразу показываем заказ в списке, запись в таблицу — в фоне
+  var shown = JSON.parse(JSON.stringify(o)); shown.disc = o.disc/100; shown.saving = true; shown.bonus = null;
+  var list = S.data.orders, idx = o.row ? list.findIndex(function(x){ return x.row===o.row; }) : -1;
+  if (idx >= 0) list[idx] = shown; else if (o.date.slice(0,7) === S.month) list.unshift(shown);
+  if (!(S.data.clients||[]).some(function(c){ return c.name.toLowerCase()===o.client.toLowerCase(); }))
+    (S.data.clients = S.data.clients||[]).unshift({name:o.client, addr:o.addr, disc:o.disc/100, trade:o.trade, mgr:o.mgr, phone:'', comment:'', n:1, sum:o.sum, last:o.date});
+  closeModal(); render(); toast('Заказ сохраняется…');
+  bg('saveOrder', o).then(function(){ toast('Заказ записан в таблицу'); });
+}
+function delOrder(){
+  var o = F;
+  confirmBox('Удалить заказ «'+o.client+'» на '+money(o.sum)+'? Строка удалится из таблицы.', function(){
+    S.data.orders = S.data.orders.filter(function(x){ return x.row!==o.row; });
+    closeModal(); render(); toast('Заказ удалён');
+    bg('deleteOrder', {row:o.row, sheet:o.sheet, orig:o.orig});
+  });
+}
+
+
+// ---------- зарплата ----------
+function vSalary(){
+  var n = cur(), v=$('view');
+  if (!n){ v.innerHTML = pickHint('зарплату'); return; }
+  var s = S.data.salary[n];
+  if (!s){ v.innerHTML = '<div class="empty">Загрузка…</div>'; return; }
+  if (s.missing){ v.innerHTML='<div class="card empty">Нет листа «'+esc(n)+'. ЗП» в таблице</div>'; return; }
+  var orders = S.data.orders.filter(function(o){ return o.mgr===n && o.bonus; });
+  var total = s.lines.filter(function(l){ return /итого/i.test(l.label); })[0];
+  var paid = orders.filter(function(o){ return o.paid; }), wait = orders.filter(function(o){ return !o.paid; });
+  var up = (S.data.unpaid||{})[n] || {n:0, sum:0, bonus:0};
+  var h = '<div class="stats"><div class="stat"><small>Итого за месяц</small><b>'+(total&&total.value!=null?money(total.value):'—')+'</b></div>'+
+    '<div class="stat" style="cursor:pointer" onclick="goUnpaid(\''+esc(n)+'\')"><small>Ждёт оплаты клиентом (за всё время)</small><b>+'+money(up.bonus)+'</b><small>не оплачено заказов: '+up.n+' на '+money(up.sum)+' ›</small></div></div>';
+  h += '<div class="card"><h3>'+esc(n)+' · '+MON[+S.month.slice(5,7)-1]+'</h3>'+(s.lines.length?'<table>'+
+    s.lines.map(function(l){ return '<tr><td>'+esc(l.label)+'</td><td class="n"><b>'+(l.value==null?'—':l.pct?pct(l.value):money(l.value))+'</b></td></tr>'; }).join('')+'</table>':'<div class="note">В листе «'+esc(n)+'. ЗП» нет расчёта за этот месяц.</div>')+
+    '<div class="note">Считается в листе «'+esc(n)+'. ЗП». Бонус с продаж — только по оплаченным заказам.</div></div>';
+  h += '<div class="card"><h3>Условия</h3><table>'+s.cond.map(function(c){ return '<tr><td>'+esc(c.label)+'</td><td class="n">'+money(c.value)+'</td></tr>'; }).join('')+'</table>'+
+    '<table style="margin-top:8px"><tr><th>Скидка клиенту</th><th class="n">Бонус с продаж</th></tr>'+s.tiers.map(function(t,i){
+      var to = s.tiers[i+1] ? ' – '+Math.round(s.tiers[i+1][0]*100-1)+'%' : ' и больше';
+      return '<tr><td>'+Math.round(t[0]*100)+'%'+to+'</td><td class="n">'+pct(t[1])+'</td></tr>'; }).join('')+
+    '<tr><td>Торгующая компания</td><td class="n">1,5%</td></tr></table></div>';
+  h += '<div class="card"><h3>Бонус по заказам</h3>'+(orders.length?'<div class="scroll"><table><tr><th>Дата</th><th>Клиент</th><th class="n">Сумма</th><th class="n">%</th><th class="n">Бонус</th></tr>'+
+    paid.concat(wait).map(function(o){ return '<tr style="'+(o.paid?'':'color:var(--mute)')+'"><td>'+dmy(o.date).slice(0,5)+'</td><td>'+esc(o.client)+(o.paid?'':' <span class="tag warn">не оплачен</span>')+'</td><td class="n">'+money(o.sum)+'</td><td class="n">'+pct(o.bonus.rate)+'</td><td class="n">'+money(o.bonus.sum)+'</td></tr>'; }).join('')+
+    '</table></div>':'<div class="empty">Заказов в этом месяце нет</div>')+'</div>';
+  v.innerHTML = h;
+}
+
+function goUnpaid(n){ if (S.me.boss){ S.mgr = n; $('mgr').value = n; } S.of = 'unpaid'; S.unpaidAll = true; S.range = null; Q = ''; go('orders'); }
+
+// ---------- план и отчёт ----------
+function vPlan(){
+  var n = cur(), v=$('view');
+  if (!n){ v.innerHTML = pickHint('план и отчёты'); return; }
+  var p = S.data.plan[n];
+  if (!p){ v.innerHTML = '<div class="empty">Загрузка…</div>'; return; }
+  S.planData = p;
+  var h = '';
+  if (n === S.me.name){
+    var d = S.repDate || S.today, last = p.reports.filter(function(r){ return r.date===d; })[0] || {};
+    h += '<div class="card"><h3>Отчёт за день</h3><label class="f">Дата<input type="date" id="r_date" value="'+d+'" onchange="S.repDate=this.value;fillRep()"></label>'+
+      '<div class="row2">'+PM.slice(0,4).map(function(m){ return '<label class="f">'+m[1]+'<input inputmode="numeric" id="r_'+m[0]+'" value="'+(last[m[0]]||'')+'"></label>'; }).join('')+'</div>'+
+      '<label class="f">Комментарий<textarea id="r_comment">'+esc(last.comment||'')+'</textarea></label>'+
+      '<div class="acts"><button class="btn" onclick="saveRep()">Сохранить отчёт</button></div></div>';
+  }
+  h += '<div class="card"><h3 style="display:flex;align-items:center"><span style="flex:1">План · '+esc(n)+'</span>'+(S.me.boss?'<button class="btn sec sm" onclick="editPlan()">Изменить план</button>':'')+'</h3>';
+  if (!p.hasPlan) h += '<div class="note">План на этот месяц ещё не поставлен'+(S.me.boss?'':' руководителем')+'.</div>';
+  h += PM.map(function(m){
+    var pl=p.plan[m[0]], f=p.fact[m[0]], r = pl ? f/pl : 0;
+    var cls = r>=1?'ok':r>=0.5?'':'warn';
+    var fmt = m[0]==='sum' ? money : function(x){ return Math.round(x); };
+    return '<div class="prog"><div class="h"><span>'+m[1]+'</span><b>'+fmt(f)+(pl?' / '+fmt(pl)+' · '+Math.round(r*100)+'%':'')+'</b></div><div class="track"><i class="'+cls+'" style="width:'+Math.min(100,r*100)+'%"></i></div></div>';
+  }).join('');
+  h += '<table style="margin-top:8px"><tr><th>Конверсия</th><th class="n">План</th><th class="n">Факт</th></tr>'+
+    '<tr><td>Звонки → встречи с тёплыми</td><td class="n">'+(p.plan.cv1?pct(p.plan.cv1):'—')+'</td><td class="n">'+pct(p.fact.cv1)+'</td></tr>'+
+    '<tr><td>Встречи → договоры</td><td class="n">'+(p.plan.cv2?pct(p.plan.cv2):'—')+'</td><td class="n">'+pct(p.fact.cv2)+'</td></tr></table>'+
+    '<div class="note">Сумма заказов берётся из таблицы заказов, остальное — из ежедневных отчётов.</div></div>';
+  h += '<div class="card"><h3>Отчёты за месяц</h3>'+(p.reports.length?'<div class="scroll"><table><tr><th>Дата</th><th class="n">Звонки</th><th class="n">Тёплые</th><th class="n">Холодные</th><th class="n">Договоры</th></tr>'+
+    p.reports.map(function(r){ return '<tr><td>'+dmy(r.date).slice(0,5)+(r.comment?'<div class="note" style="margin:2px 0 0">'+esc(r.comment)+'</div>':'')+'</td><td class="n">'+r.calls+'</td><td class="n">'+r.warm+'</td><td class="n">'+r.cold+'</td><td class="n">'+r.deals+'</td></tr>'; }).join('')+
+    '</table></div>':'<div class="empty">Отчётов пока нет</div>')+'</div>';
+  v.innerHTML = h;
+}
+function fillRep(){
+  var d=$('r_date').value, r=(S.planData.reports.filter(function(x){ return x.date===d; })[0])||{};
+  PM.slice(0,4).forEach(function(m){ $('r_'+m[0]).value = r[m[0]]||''; });
+  $('r_comment').value = r.comment||'';
+}
+function saveRep(){
+  var r={date:$('r_date').value, comment:$('r_comment').value};
+  PM.slice(0,4).forEach(function(m){ r[m[0]] = num($('r_'+m[0]).value); });
+  // пересчитываем план на экране сразу
+  var p = S.data.plan[S.me.name], reps = p.reports.filter(function(x){ return x.date!==r.date; });
+  if (r.date.slice(0,7) === S.month) reps.push(r);
+  reps.sort(function(a,b){ return a.date<b.date?1:-1; });
+  p.reports = reps;
+  ['calls','warm','cold','deals'].forEach(function(k){ p.fact[k] = reps.reduce(function(s,x){ return s+(+x[k]||0); },0); });
+  p.fact.cv1 = p.fact.calls ? p.fact.warm/p.fact.calls : 0;
+  p.fact.cv2 = (p.fact.warm+p.fact.cold) ? p.fact.deals/(p.fact.warm+p.fact.cold) : 0;
+  if (r.date === S.today){ doneLocal('Выслать отчёт'); if (S.data.att) setAtt('end', hmNow()); }
+  render(); toast('Отчёт сохранён');
+  bg('saveReport', r);
+}
+function editPlan(){
+  var p=S.planData.plan;
+  openModal('<h2><span>План: '+esc(cur())+', '+MON[+S.month.slice(5,7)-1]+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    PM.map(function(m){ return '<label class="f">'+m[1]+(m[0]==='sum'?', ₽':'')+'<input inputmode="numeric" id="p_'+m[0]+'" value="'+(p[m[0]]||'')+'"></label>'; }).join('')+
+    '<div class="row2"><label class="f">CV звонки → встречи, %<input inputmode="decimal" id="p_cv1" value="'+(p.cv1?Math.round(p.cv1*1000)/10:'')+'"></label><label class="f">CV встречи → договоры, %<input inputmode="decimal" id="p_cv2" value="'+(p.cv2?Math.round(p.cv2*1000)/10:'')+'"></label></div>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="savePlan()">Сохранить</button></div>');
+}
+function savePlan(){
+  var p={}; PM.concat([['cv1'],['cv2']]).forEach(function(m){ p[m[0]] = num($('p_'+m[0]).value); });
+  var n = cur(), pl = S.data.plan[n];
+  pl.plan = {calls:p.calls, warm:p.warm, cold:p.cold, deals:p.deals, sum:p.sum, cv1:p.cv1/100, cv2:p.cv2/100}; pl.hasPlan = true;
+  closeModal(); render(); toast('План сохранён');
+  bg('savePlan', n, S.month, p);
+}
+
+// ---------- итоги: план и зарплата ----------
+function vStats(){
+  var t = S.statTab || 'plan';
+  var seg = '<div class="seg"><button class="'+(t==='plan'?'on':'')+'" onclick="S.statTab=\'plan\';render()">План и отчёт</button><button class="'+(t==='salary'?'on':'')+'" onclick="S.statTab=\'salary\';render()">Зарплата</button></div>';
+  if (t === 'salary') vSalary(); else vPlan();
+  $('view').insertAdjacentHTML('afterbegin', seg);
+}
+
+// ---------- задачи: доска по статусам ----------
+var TSTAT = ['Новая','В работе','Готово'], PRIOS = ['Высокий','Обычный','Низкий'];
+function prioCls(p){ return p==='Высокий'?'p-high':p==='Низкий'?'p-low':''; }
+function vTasks(){
+  var n = cur(), v=$('view');
+  var tf = S.tf || 'mine';
+  var list = S.data.tasks.filter(function(t){
+    if (S.me.boss) return !n || t.emp===n;
+    return tf==='mine' ? t.emp===S.me.name : (t.by===S.me.name && t.emp!==S.me.name);
+  });
+  S.tasks = list;
+  var cols = TSTAT.map(function(st){
+    var items = list.filter(function(t){ return (t.status||'Новая')===st; }).sort(function(a,b){
+      var pa = PRIOS.indexOf(a.prio||'Обычный'), pb = PRIOS.indexOf(b.prio||'Обычный');
+      if (pa !== pb) return pa - pb;
+      return (a.due||'9') < (b.due||'9') ? -1 : 1;
+    });
+    if (st === 'Готово') items = items.slice(0, 30);
+    return '<div class="kcol" data-st="'+st+'" ondragover="event.preventDefault();this.classList.add(\'over\')" ondragleave="this.classList.remove(\'over\')" ondrop="dropTask(event,\''+st+'\')">'+
+      '<h4><span>'+st+'</span><span>'+items.length+'</span></h4>'+items.map(kcard).join('')+
+      (st==='Новая'?'<button class="btn ghost sm" style="width:100%" onclick="editTask()">+ Задача</button>':'')+'</div>';
+  }).join('');
+  v.innerHTML = '<div class="bar"><button class="btn" style="flex:1" onclick="editTask()">+ Задача</button></div>'+
+    (S.me.boss ? '' : '<div class="seg"><button class="'+(tf==='mine'?'on':'')+'" onclick="S.tf=\'mine\';render()">Мои задачи</button><button class="'+(tf==='byme'?'on':'')+'" onclick="S.tf=\'byme\';render()">Я поставил коллегам</button></div>')+
+    '<div class="kanban">'+cols+'</div><div class="note">На компьютере карточку можно перетащить мышкой, на телефоне — кнопками ← →.</div>';
+}
+function kcard(t){
+  var i = S.tasks.indexOf(t), late = t.due && t.due<S.today && t.status!=='Готово', si = TSTAT.indexOf(t.status||'Новая');
+  return '<div class="kcard '+prioCls(t.prio)+'" draggable="true" ondragstart="event.dataTransfer.setData(\'text\',\''+t.id+'\')">'+
+    '<div class="kt" onclick="editTask('+i+')" style="cursor:pointer'+(t.status==='Готово'?';text-decoration:line-through;color:var(--mute)':'')+'">'+esc(t.text)+'</div><div class="tags">'+
+    (t.prio==='Высокий'?'<span class="tag bad">срочно</span>':'')+
+    (t.due?'<span class="tag '+(late?'bad':t.due===S.today?'warn':'gray')+'">📅 '+dueLbl(t.due)+(t.time?' '+t.time:'')+'</span>':'')+
+    (t.client?'<span class="tag" style="cursor:pointer" onclick="event.stopPropagation();openClientName(this.dataset.n)" data-n="'+esc(t.client)+'">🏥 '+esc(t.client)+'</span>'+taskPhone(t):'')+
+    ((S.me.boss&&!cur()) || t.emp!==S.me.name ?'<span class="tag">👤 '+esc(t.emp)+'</span>':'')+
+    (t.repeat?'<span class="tag vio">🔁 '+esc(t.repeat.toLowerCase())+'</span>':'')+
+    (t.by && t.by!==t.emp?'<span class="tag gray">от '+esc(t.by)+'</span>':'')+'</div>'+
+    '<div class="kmove">'+(si>0?'<button onclick="moveTask(\''+t.id+'\',\''+TSTAT[si-1]+'\')">← '+TSTAT[si-1]+'</button>':'')+
+    (si<2?'<button onclick="moveTask(\''+t.id+'\',\''+TSTAT[si+1]+'\')">'+TSTAT[si+1]+' →</button>':'')+'</div></div>';
+}
+// Срок словами: «сегодня», «завтра», иначе дд.мм.
+function dueLbl(d){
+  var t = new Date(S.today+'T00:00:00'); t.setDate(t.getDate()+1);
+  var tm = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  return d===S.today ? 'сегодня' : d===tm ? 'завтра' : dmy(d).slice(0,5);
+}
+// Телефон клиента задачи: строка карточки с именем контакта из задачи, иначе первый номер.
+function taskPhone(t){
+  var c = (S.data.clients||[]).filter(function(x){ return x.name===t.client; })[0];
+  if (!c) return '';
+  var ps = phonesOf([c.phone, c.addr, c.comment].filter(Boolean).join('\n')); if (!ps.length) return '';
+  var words = t.text.toLowerCase().split(/[^а-яёa-z]+/).filter(function(w){ return w.length>=4; }).map(function(w){ return w.slice(0, Math.max(3, w.length-2)); });
+  var p = ps.filter(function(x){ var l=' '+String(x.label||'').toLowerCase(); return words.some(function(w){ return l.indexOf(' '+w)>=0; }); })[0] || ps[0];
+  return '<a class="tag ok" style="text-decoration:none" href="tel:'+p.num+'" onclick="event.stopPropagation()">📞 '+esc(p.show)+'</a>';
+}
+function openClientName(n){
+  var c = (S.data.clients||[]).filter(function(x){ return x.name===n; })[0];
+  if (!c){ toast('Клиент «'+n+'» не найден в списке', true); return; }
+  S.clist = [c]; openClient(0);
+}
+function dropTask(ev, st){ ev.preventDefault(); ev.currentTarget.classList.remove('over'); moveTask(ev.dataTransfer.getData('text'), st); }
+function moveTask(id, st){
+  var t = S.data.tasks.filter(function(x){ return x.id===id; })[0];
+  if (!t || t.status===st) return;
+  t.status = st; t.done = st==='Готово' ? S.today : '';
+  render();
+  bg('saveTask', {id:t.id, text:t.text, due:t.due, time:t.time, client:t.client, emp:t.emp, status:st, prio:t.prio, repeat:t.repeat});
+}
+function editTask(i, preset){
+  var t = i===undefined || i===null ? (preset || {text:'', due:'', emp: cur()||S.me.name, status:'Новая', prio:'Обычный'}) : S.tasks[i];
+  var emp = '<label class="f">Исполнитель<select id="t_emp">'+S.team.map(function(n){ return '<option'+(n===t.emp?' selected':'')+'>'+esc(n)+(n===S.me.name?' (я)':'')+'</option>'; }).join('')+'</select></label>'+
+    '<label class="f">Повторять<select id="t_rep">'+[['','Не повторять'],['Ежедневно','Каждый день'],['По будням','По будням'],['Еженедельно','Каждую неделю'],['Ежемесячно','Каждый месяц']].map(function(r){ return '<option value="'+r[0]+'"'+((t.repeat||'')===r[0]?' selected':'')+'>'+r[1]+'</option>'; }).join('')+'</select></label>';
+  openModal('<h2><span>'+(t.id?'Задача':'Новая задача')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Что сделать</label><div style="display:flex;gap:8px;align-items:flex-start;margin-top:4px"><textarea id="t_text" style="flex:1">'+esc(t.text)+'</textarea></div>'+
+    '<label class="f">Клиент<input id="t_cli" autocomplete="off" placeholder="Необязательно — начните вводить название" value="'+esc(t.client||'')+'" oninput="clientSuggest(this, $(\'t_cli_s\'), function(c){ $(\'t_cli\').value=c.name; })"></label><div id="t_cli_s"></div>'+emp+
+    '<div class="row2"><label class="f">Срок<input type="date" id="t_due" value="'+(t.due||'')+'"></label><label class="f">Время<input type="time" id="t_time" value="'+(t.time||'')+'"></label></div>'+
+    '<div class="note" style="margin-top:4px">'+(S.tg&&S.tg.bot?'В это время бот напомнит исполнителю в Telegram (если он подключил 🔔).':'Напоминание по времени придёт в Telegram, когда руководитель подключит бота.')+'</div>'+
+    '<label class="f">Приоритет<select id="t_prio">'+PRIOS.map(function(p){ return '<option'+(p===(t.prio||'Обычный')?' selected':'')+'>'+p+'</option>'; }).join('')+'</select></label>'+
+    '<label class="f">Статус<select id="t_st">'+TSTAT.map(function(s){ return '<option'+(s===(t.status||'Новая')?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></label>'+
+    '<div class="acts">'+(t.id?'<button class="btn bad" onclick="delTask(\''+t.id+'\')">Удалить</button>':'<button class="btn ghost" onclick="closeModal()">Отмена</button>')+'<button class="btn" onclick="saveTask(\''+(t.id||'')+'\')">Сохранить</button></div>');
+  if (!preset) setTimeout(function(){ $('t_text').focus(); }, 50);
+}
+function saveTask(id){
+  var t={id:id, text:$('t_text').value.trim(), due:$('t_due').value, time:$('t_time').value, client:$('t_cli').value.trim(), status:$('t_st').value, prio:$('t_prio').value, emp: $('t_emp').value, repeat: $('t_rep').value};
+  if ((t.repeat || t.time) && !t.due) t.due = S.today;
+  if (!t.text){ toast('Напишите задачу', true); return; }
+  var ex = S.data.tasks.filter(function(x){ return x.id===id; })[0];
+  if (ex){ ex.text=t.text; ex.due=t.due; ex.time=t.time; ex.client=t.client; ex.status=t.status; ex.prio=t.prio; ex.emp=t.emp; ex.repeat=t.repeat; ex.done = t.status==='Готово' ? (ex.done||S.today) : ''; }
+  else {
+    t.id = Math.random().toString(16).slice(2,10);
+    S.data.tasks.push({id:t.id, emp:t.emp, text:t.text, due:t.due, time:t.time, client:t.client, status:t.status, prio:t.prio, repeat:t.repeat, by:S.me.name, created:S.today, done:t.status==='Готово'?S.today:''});
+    if (t.emp !== S.me.name && !S.me.boss) S.tf = 'byme';
+  }
+  closeModal(); render(); toast('Задача сохранена');
+  bg('saveTask', t);
+}
+function delTask(id){
+  S.data.tasks = S.data.tasks.filter(function(x){ return x.id!==id; });
+  closeModal(); render(); toast('Задача удалена');
+  bg('deleteTask', id);
+}
+
+// ---------- голосовой ввод ----------
+// Распознавание речи браузера. Если программа открыта во встроенном окне, где микрофон запрещён,
+// подсказываем микрофон на клавиатуре телефона — он работает в любом поле.
+var REC = null;
+function voiceHelp(){
+  openModal('<h2><span>Голосовой ввод</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div style="line-height:1.5">Google открывает программу во встроенном окне и не даёт ей микрофон. Надиктовать текст можно так:<br><br>'+
+    '1. Нажмите в поле «Что сделать».<br>2. На клавиатуре телефона нажмите значок микрофона 🎤 (на iPhone — справа внизу, на Android — сверху клавиатуры).<br>3. Говорите — текст появится в поле.</div>'+
+    '<div class="acts"><button class="btn" onclick="closeModal()">Понятно</button></div>');
+}
+function listen(onText, btn){
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ voiceHelp(); return false; }
+  if (REC){ REC.stop(); return true; }
+  var r = new SR(); REC = r;
+  r.lang = 'ru-RU'; r.interimResults = false; r.maxAlternatives = 1;
+  if (btn) btn.classList.add('rec');
+  r.onresult = function(e){ onText(e.results[0][0].transcript); };
+  r.onerror = function(e){
+    if (e.error==='not-allowed' || e.error==='service-not-allowed' || e.error==='audio-capture') voiceHelp(); else toast('Не расслышал, попробуйте ещё раз', true);
+  };
+  r.onend = function(){ REC = null; if (btn) btn.classList.remove('rec'); };
+  try { r.start(); toast('Говорите…'); } catch(e){ REC = null; if (btn) btn.classList.remove('rec'); voiceHelp(); }
+  return true;
+}
+function voiceInto(id){
+  var el = $(id);
+  listen(function(txt){ el.value = (el.value ? el.value.trim()+' ' : '') + txt; }, event && event.currentTarget);
+}
+// Сказали задачу целиком — разбираем срок, срочность и исполнителя, открываем готовую форму.
+function voiceTask(){
+  listen(function(txt){ editTask(null, parseTask(txt)); }, event && event.currentTarget);
+}
+function parseTask(txt){
+  var t = {text: txt, due:'', emp: cur()||S.me.name, status:'Новая', prio:'Обычный'}, low = txt.toLowerCase();
+  if (/срочн|важн|горит|немедленно/.test(low)) t.prio = 'Высокий';
+  var d = new Date(S.today+'T00:00:00'), add = null;
+  if (/послезавтра/.test(low)) add = 2; else if (/завтра/.test(low)) add = 1; else if (/сегодня/.test(low)) add = 0;
+  var days = ['воскресень','понедельник','вторник','сред','четверг','пятниц','суббот'];
+  days.forEach(function(w, wd){ if (add===null && new RegExp('(в|во|до|к)\\s+'+w).test(low)) add = ((wd - d.getDay() + 7) % 7) || 7; });
+  var m = low.match(/(\d{1,2})[.\s](\d{1,2}|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/);
+  var MN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  if (m){ var mo = isNaN(+m[2]) ? MN.indexOf(m[2]) : +m[2]-1; if (mo>=0 && mo<12){ var dd = new Date(d.getFullYear(), mo, +m[1]); if (dd < d) dd.setFullYear(dd.getFullYear()+1); t.due = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0'); } }
+  if (add!==null && !t.due){ d.setDate(d.getDate()+add); t.due = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  var tm = low.match(/(\d{1,2}):(\d{2})/);
+  if (tm && +tm[1] < 24 && +tm[2] < 60){ t.time = ('0'+tm[1]).slice(-2)+':'+tm[2]; if (!t.due) t.due = S.today; }
+  if (S.me.boss) S.team.forEach(function(n){ if (low.indexOf(n.toLowerCase().slice(0, Math.max(4, n.length-2)))>=0) t.emp = n; });
+  t.text = txt.charAt(0).toUpperCase() + txt.slice(1);
+  return t;
+}
+
+// ---------- клиенты ----------
+var CQ = '';
+function vClients(){
+  var v = $('view'), keep = document.activeElement && document.activeElement.id==='cq';
+  var mine = S.me.boss ? null : S.me.name;
+  var list = (S.data.clients||[]).filter(function(c){
+    if (CQ) return (c.name+' '+c.addr+' '+c.phone).toLowerCase().indexOf(CQ.toLowerCase())>=0;
+    return mine ? (c.n>0 || c.mgr===mine) : true;
+  }).sort(function(a,b){ return (b.last||'') < (a.last||'') ? -1 : (b.last||'') > (a.last||'') ? 1 : b.n - a.n; });
+  S.clist = list.slice(0, 200);
+  v.innerHTML = '<div class="bar"><input id="cq" placeholder="Поиск клиента, адреса, телефона" value="'+esc(CQ)+'"><button class="btn" onclick="editClient()">+ Клиент</button></div>'+
+    '<div class="note" style="margin:0 2px 8px">'+(CQ?'Найдено: '+list.length:(mine?'Ваши клиенты: ':'Клиентов: ')+list.length)+'</div>'+
+    '<div class="list">'+S.clist.map(function(c,i){
+      return '<div class="item" onclick="openClient('+i+')"><div class="t"><b>'+esc(c.name)+'</b>'+(c.n?'<span>'+money(c.sum)+'</span>':'')+'</div>'+
+        '<div class="s">'+esc(c.addr.split('\n')[0])+'</div><div class="tags">'+
+        (c.n?'<span class="tag gray">заказов '+c.n+'</span>':'')+(c.last?'<span class="tag gray">последний '+dmy(c.last)+'</span>':'')+
+        (c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'')+(c.trade?'<span class="tag vio">торгующая</span>':'')+
+        (S.me.boss&&c.mgr?'<span class="tag gray">'+esc(c.mgr)+'</span>':'')+'</div></div>';
+    }).join('')+'</div>'+(list.length>200?'<div class="note">Показаны первые 200 — уточните поиск.</div>':'');
+  var t; $('cq').oninput = function(){ clearTimeout(t); t = setTimeout(function(){ CQ = $('cq').value.trim(); render(); }, 300); };
+  if (keep){ var q=$('cq'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+}
+var CUR_CLIENT = null;
+function openClient(i){
+  var c = S.clist[i]; CUR_CLIENT = c;
+  openModal('<h2><span>'+esc(c.name)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="stats"><div class="stat"><small>Заказов</small><b>'+c.n+'</b></div><div class="stat"><small>На сумму</small><b>'+money(c.sum)+'</b></div></div>'+
+    '<div class="card" style="margin-top:0"><div class="s" style="white-space:pre-line">'+esc(c.addr||'Адрес не указан')+'</div>'+
+    '<div class="acts" style="margin-top:10px;flex-wrap:wrap">'+callButtons(c.phone+'\n'+c.addr)+routeButton(c.addr)+'</div>'+
+    '<div class="tags">'+(c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'<span class="tag gray">без скидки</span>')+(c.trade?'<span class="tag vio">торгующая</span>':'')+(c.mgr?'<span class="tag gray">менеджер '+esc(c.mgr)+'</span>':'')+'</div>'+
+    (c.comment?'<div class="note">'+esc(c.comment)+'</div>':'')+'</div>'+
+    '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
+    '<div id="c_note"></div><div class="sec-t">История</div><div id="c_hist"><div class="empty">Загрузка…</div></div>');
+  api('getClient', c.name).then(function(h){
+    if (CUR_CLIENT !== c || !$('c_hist')) return;
+    var ev = h.notes.map(function(n){ return {date:n.date, html:'<b>'+esc(n.type)+'</b> · '+esc(n.emp)+'<div style="white-space:pre-line">'+esc(n.text)+'</div>'}; })
+      .concat(h.orders.map(function(o){ return {date:o.date, html:'<b>Заказ '+money(o.sum)+'</b>'+(o.disc?' · скидка '+pct(o.disc):'')+' · '+esc(o.mgr)+' · '+esc(o.status||'')+(o.paid?' · оплачен':'')+'<div class="s">'+esc(o.order)+'</div>'}; }))
+      .sort(function(a,b){ return a.date<b.date?1:-1; });
+    $('c_hist').innerHTML = ev.length ? ev.map(function(e){ return '<div class="item" style="cursor:default"><div class="note" style="margin:0 0 4px">'+dmy(e.date)+'</div>'+e.html+'</div>'; }).join('') : '<div class="empty">Пока пусто</div>';
+  }).catch(function(){});
+}
+function noteForm(){
+  $('c_note').innerHTML = '<div class="card"><div class="row2"><label class="f">Что было<select id="n_type"><option>Звонок</option><option>Встреча</option><option>Письмо / мессенджер</option><option>Заметка</option></select></label><label class="f">Дата<input type="date" id="n_date" value="'+S.today+'"></label></div>'+
+    '<label class="f">Итог</label><div style="display:flex;gap:8px;align-items:flex-start;margin-top:4px"><textarea id="n_text" style="flex:1" placeholder="О чём договорились"></textarea></div>'+
+    '<div class="acts"><button class="btn" onclick="saveNote()">Сохранить запись</button></div></div>';
+  $('n_text').focus();
+}
+function saveNote(){
+  var n = {client: CUR_CLIENT.name, type:$('n_type').value, date:$('n_date').value, text:$('n_text').value.trim()};
+  if (!n.text){ toast('Напишите итог', true); return; }
+  $('c_note').innerHTML = '';
+  var hist = $('c_hist');
+  if (hist){ if (hist.querySelector('.empty')) hist.innerHTML=''; hist.insertAdjacentHTML('afterbegin', '<div class="item saving" style="cursor:default"><div class="note" style="margin:0 0 4px">'+dmy(n.date)+'</div><b>'+esc(n.type)+'</b> · '+esc(S.me.name)+'<div style="white-space:pre-line">'+esc(n.text)+'</div></div>'); }
+  toast('Запись сохраняется…');
+  api('addClientNote', n).then(function(){ toast('Запись сохранена'); if (hist && hist.firstChild) hist.firstChild.classList.remove('saving'); }).catch(function(){});
+}
+function editClient(c){
+  var isNew = !c; c = c || {name:'', addr:'', phone:'', disc:0, trade:false, comment:''};
+  openModal('<h2><span>'+(isNew?'Новый клиент':'Карточка клиента')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Название<input id="c_name" value="'+esc(c.name)+'"></label>'+
+    '<label class="f">Адрес доставки / контакты<textarea id="c_addr">'+esc(c.addr)+'</textarea></label>'+
+    '<label class="f">Телефоны — каждый с новой строки, можно с именем (Руслан +7 925 530-32-37)<textarea id="c_phone" style="min-height:80px">'+esc(c.phone)+'</textarea></label>'+
+    '<label class="f">Обычная скидка, %<input id="c_disc" inputmode="decimal" value="'+(c.disc?Math.round(c.disc*1000)/10:'')+'"></label>'+
+    '<label class="chk"><input type="checkbox" id="c_trade"'+(c.trade?' checked':'')+'> Торгующая компания</label>'+
+    '<label class="f">Комментарий<textarea id="c_comment">'+esc(c.comment)+'</textarea></label>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="saveClient('+(isNew?'null':'CUR_CLIENT')+')">Сохранить</button></div>');
+}
+function saveClient(orig){
+  var c = {orig: orig ? orig.name : '', name:$('c_name').value.trim(), addr:$('c_addr').value.trim(), phone:$('c_phone').value.trim(),
+    disc:num($('c_disc').value), trade:$('c_trade').checked, comment:$('c_comment').value.trim()};
+  if (!c.name){ toast('Укажите название', true); return; }
+  var shown = {name:c.name, addr:c.addr, phone:c.phone, disc:c.disc/100, trade:c.trade, comment:c.comment};
+  if (orig) Object.keys(shown).forEach(function(k){ orig[k] = shown[k]; });
+  else (S.data.clients = S.data.clients||[]).unshift(Object.assign(shown, {mgr:S.me.name, n:0, sum:0, last:''}));
+  closeModal(); render(); toast('Клиент сохранён');
+  bg('saveClient', c);
+}
+
+// ---------- база знаний ----------
+var KQ = '';
+// подсветка найденного и фрагмент текста вокруг первого совпадения
+function hl(t){ var e = esc(t); if (!KQ) return e; var q = esc(KQ).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return e.replace(new RegExp(q,'gi'), function(m){ return '<mark>'+m+'</mark>'; }); }
+function snippet(t){ var i = t.toLowerCase().indexOf(KQ.toLowerCase()); if (i < 0) return esc(t.slice(0,160)); var a = Math.max(0, i-70); return (a?'…':'')+hl(t.slice(a, i+KQ.length+110))+'…'; }
+function vKb(){
+  var v = $('view'), keep = document.activeElement && document.activeElement.id==='kq';
+  if (!S.kbAll){
+    v.innerHTML = '<div class="empty">Загрузка регламентов…</div>';
+    api('getKb').then(function(d){ S.kbAll = d; if (S.tab==='kb') render(); }).catch(function(){});
+    return;
+  }
+  var list = S.kbAll.filter(function(d){
+    if (!KQ) return true;
+    var all = (d.title+' '+d.section+' '+d.text).toLowerCase(), q = KQ.toLowerCase();
+    d.hits = all.split(q).length - 1;
+    return d.hits > 0;
+  }).sort(function(a,b){ return KQ ? b.hits - a.hits : 0; });
+  S.kbl = list;
+  var secs = [];
+  list.forEach(function(d){ if (secs.indexOf(d.section)<0) secs.push(d.section); });
+  v.innerHTML = '<div class="bar"><input id="kq" placeholder="Поиск по тексту регламентов" value="'+esc(KQ)+'">'+(S.me.boss?'<button class="btn" onclick="editKb()">+ Документ</button>':'')+'</div>'+
+    (list.length ? secs.map(function(s){
+      return '<div class="sec-t">'+esc(s)+'</div>'+list.filter(function(d){ return d.section===s; }).map(function(d){
+        var i = list.indexOf(d);
+        return '<div class="item" onclick="openKb('+i+')"><div class="t"><b>📄 '+hl(d.title)+'</b>'+(KQ&&d.hits?'<span class="tag">совпадений: '+d.hits+'</span>':'')+'</div><div class="s" style="-webkit-line-clamp:3">'+(KQ?snippet(d.text):esc(d.text.slice(0,140)))+'</div>'+
+          '<div class="tags">'+(d.link?'<span class="tag">есть файл</span>':'')+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div></div>';
+      }).join('');
+    }).join('') : '<div class="card empty">'+(KQ?'Ничего не найдено':'Здесь будут регламенты и инструкции.'+(S.me.boss?'<br>Нажмите «+ Документ», чтобы добавить первый.':''))+'</div>');
+  var t; $('kq').oninput = function(){ clearTimeout(t); t = setTimeout(function(){ KQ = $('kq').value.trim(); render(); }, 300); };
+  if (keep){ var q=$('kq'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+}
+function openKb(i){
+  var d = S.kbl[i];
+  openModal('<h2><span>'+esc(d.title)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="tags" style="margin:0 0 12px"><span class="tag gray">'+esc(d.section)+'</span>'+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div>'+
+    (d.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(d.link)+'" target="_blank" rel="noopener">Открыть файл</a>':'')+
+    '<div class="kb-text">'+hl(d.text)+'</div>'+
+    (S.me.boss&&!d.lesson?'<div class="acts"><button class="btn bad" onclick="delKb(\''+d.id+'\')">Удалить</button><button class="btn sec" onclick="editKb('+i+')">Изменить</button></div>':''));
+}
+function editKb(i){
+  var d = i===undefined ? {id:'', section:'', title:'', text:'', link:''} : S.kbl[i];
+  var secs = []; (S.kbAll||[]).forEach(function(x){ if (secs.indexOf(x.section)<0) secs.push(x.section); });
+  openModal('<h2><span>'+(d.id?'Изменить документ':'Новый документ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Раздел<input id="k_sec" list="k_secs" placeholder="Например: Продажи, Отгрузка, Возвраты" value="'+esc(d.section)+'"></label><datalist id="k_secs">'+secs.map(function(s){ return '<option value="'+esc(s)+'">'; }).join('')+'</datalist>'+
+    '<label class="f">Название<input id="k_title" value="'+esc(d.title)+'"></label>'+
+    '<label class="f">Ссылка на файл (Google Документ, PDF на Диске) — необязательно<input id="k_link" value="'+esc(d.link)+'" placeholder="https://"></label>'+
+    '<label class="f">Текст регламента<textarea id="k_text" style="min-height:220px">'+esc(d.text)+'</textarea></label>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="saveKb(\''+(d.id||'')+'\')">Сохранить</button></div>');
+}
+function saveKb(id){
+  var d = {id:id || Math.random().toString(16).slice(2,10), section:$('k_sec').value.trim()||'Общее', title:$('k_title').value.trim(), link:$('k_link').value.trim(), text:$('k_text').value};
+  if (!d.title){ toast('Укажите название', true); return; }
+  var kb = S.kbAll = S.kbAll||[], ex = kb.filter(function(x){ return x.id===d.id; })[0];
+  if (ex) Object.assign(ex, d, {updated:S.today}); else kb.push(Object.assign({updated:S.today}, d));
+  closeModal(); render(); toast('Документ сохранён');
+  bg('saveKb', d);
+}
+function delKb(id){
+  confirmBox('Удалить документ из базы знаний?', function(){
+    S.kbAll = (S.kbAll||[]).filter(function(x){ return x.id!==id; });
+    closeModal(); render(); toast('Документ удалён');
+    bg('deleteKb', id);
+  });
+}
+
+// ---------- обучение: курсы, уроки, экзамены ----------
+// Курсы и прогресс грузятся при первом открытии раздела; тексты уроков — по одному при открытии.
+var LS = { lessons: {} };
+function vLearn(){
+  var v = $('view');
+  if (!S.learn){
+    v.innerHTML = '<div class="empty">Загрузка курсов…</div>';
+    api('getLearning').then(function(d){ S.learn = d; if (S.tab==='learn') render(); }).catch(function(){});
+    return;
+  }
+  var who = S.me.boss ? (cur() || S.me.name) : S.me.name;
+  var log = S.learn.log.filter(function(x){ return x.emp===who; });
+  var read = {}; log.forEach(function(x){ if (x.type==='Урок') read[x.id] = 1; });
+  var h = S.me.boss ? '<div class="note" style="margin:8px 2px">Прогресс сотрудника: <b>'+esc(who)+'</b> (выберите вверху)</div>' : '';
+  if (S.me.boss) h += reviewBlock();
+  h += S.learn.courses.map(function(c, ci){
+    var done = c.lessons.filter(function(l){ return read[l.id]; }).length, pc = c.lessons.length ? done/c.lessons.length : 0;
+    return '<div class="card"><h3>🎓 '+esc(c.name)+'</h3><div class="prog" style="margin:4px 0 8px"><div class="h"><span>Пройдено уроков</span><b>'+done+' из '+c.lessons.length+'</b></div><div class="track"><i class="'+(pc>=1?'ok':'')+'" style="width:'+Math.round(pc*100)+'%"></i></div></div>'+
+      c.lessons.map(function(l){ return '<div class="lesson" onclick="openLesson(\''+l.id+'\')"><span class="ok">'+(read[l.id]?'✓':'')+'</span><span style="flex:1">'+l.n+'. '+esc(l.title)+'</span><span style="color:var(--mute)">›</span></div>'; }).join('')+
+      c.exams.map(function(e){
+        var last = log.filter(function(x){ return x.type==='Экзамен' && x.id===e.id; }).pop();
+        var st = last ? (last.grade==='Зачёт'?'<span class="tag ok">зачёт</span>':last.grade==='Незачёт'?'<span class="tag bad">незачёт</span>':'<span class="tag warn">на проверке</span>') : '';
+        return '<div class="lesson" onclick="openExam(\''+e.id+'\')"><span class="ok">📝</span><span style="flex:1"><b>'+esc(e.name)+'</b> · вопросов '+e.count+'</span>'+st+'</div>'+
+          (last && last.comment ? '<div class="note" style="margin:0 0 6px 28px">Комментарий: '+esc(last.comment)+'</div>' : '');
+      }).join('')+'</div>';
+  }).join('');
+  if (!S.learn.courses.length) h += '<div class="card empty">Курсов пока нет</div>';
+  v.innerHTML = h;
+}
+function openLesson(id){
+  var show = function(l){
+    var read = S.learn.log.some(function(x){ return x.emp===S.me.name && x.type==='Урок' && x.id===id; });
+    openModal('<h2><span>'+esc(l.title)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      (l.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(l.link)+'" target="_blank" rel="noopener">Открыть оригинал документа</a>':'')+
+      '<div class="kb-text">'+esc(l.text)+'</div>'+
+      '<div class="acts"><button class="btn" '+(read?'disabled':'')+' onclick="lessonRead(\''+id+'\')">'+(read?'✓ Урок пройден':'Прочитал, урок пройден')+'</button></div>');
+  };
+  if (LS.lessons[id]) return show(LS.lessons[id]);
+  openModal('<div class="empty">Загрузка урока…</div>');
+  api('getLesson', id).then(function(l){ LS.lessons[id] = l; show(l); }).catch(function(){ closeModal(); });
+}
+function lessonRead(id){
+  S.learn.log.push({emp:S.me.name, type:'Урок', id:id, date:S.today});
+  closeModal(); render(); toast('Урок отмечен');
+  api('markLesson', id).catch(function(){});
+}
+// Экзамен: ответы пишутся в поля и сохраняются в телефоне как черновик, пока не отправлены.
+function openExam(id){
+  openModal('<div class="empty">Загрузка экзамена…</div>');
+  api('getExam', id).then(function(qs){
+    var draft = {}; try { draft = JSON.parse(store('dd_exam_'+id)||'{}'); } catch(e){}
+    var name = '', count = qs.length;
+    S.learn.courses.forEach(function(c){ c.exams.forEach(function(e){ if (e.id===id) name = e.name; }); });
+    openModal('<h2><span>'+esc(name)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      '<div class="note" style="margin-top:0">Вопросов: '+count+'. Ответы сохраняются на телефоне, можно продолжить позже. Проверяет руководитель.</div>'+
+      qs.map(function(q){ return '<div class="qa"><b>'+q.n+'.</b> '+esc(q.q)+'<textarea data-n="'+q.n+'" style="margin-top:8px;min-height:60px" oninput="examDraft(\''+id+'\')">'+esc(draft[q.n]||'')+'</textarea></div>'; }).join('')+
+      '<div class="acts"><button class="btn ghost" onclick="closeModal()">Продолжить позже</button><button class="btn" onclick="sendExam(\''+id+'\')">Отправить на проверку</button></div>');
+  }).catch(function(){ closeModal(); });
+}
+function examDraft(id){
+  var d = {}; Array.prototype.forEach.call(document.querySelectorAll('#sheet textarea[data-n]'), function(t){ d[t.dataset.n] = t.value; });
+  store('dd_exam_'+id, JSON.stringify(d));
+}
+function sendExam(id){
+  var ans = Array.prototype.map.call(document.querySelectorAll('#sheet textarea[data-n]'), function(t){ return {n:+t.dataset.n, a:t.value.trim()}; });
+  var empty = ans.filter(function(a){ return !a.a; }).length;
+  if (empty && !confirmBoxOnce(id, empty)) return;
+  S.learn.log.push({emp:S.me.name, type:'Экзамен', id:id, grade:'На проверке', date:S.today});
+  store('dd_exam_'+id, null);
+  closeModal(); render(); toast('Экзамен отправлен на проверку');
+  api('submitExam', id, ans).catch(function(){});
+}
+var EXAM_WARN = {};
+function confirmBoxOnce(id, empty){
+  if (EXAM_WARN[id]) return true;
+  EXAM_WARN[id] = 1;
+  toast('Без ответа вопросов: '+empty+'. Нажмите «Отправить» ещё раз, если всё равно отправить.', true);
+  return false;
+}
+// Руководителю: экзамены на проверке — ответы рядом с эталоном, зачёт/незачёт.
+function reviewBlock(){
+  var wait = S.learn.log.filter(function(x){ return x.type==='Экзамен' && x.grade==='На проверке' && x.row; });
+  if (!wait.length) return '';
+  return '<div class="card"><h3>📝 Ждут проверки: '+wait.length+'</h3>'+wait.map(function(x){
+    var name = x.id; S.learn.courses.forEach(function(c){ c.exams.forEach(function(e){ if (e.id===x.id) name = e.name; }); });
+    return '<div class="lesson" onclick="reviewExam('+x.row+')"><span style="flex:1"><b>'+esc(x.emp)+'</b> · '+esc(name)+'</span><span class="tag gray">'+dmy(x.date)+'</span></div>';
+  }).join('')+'</div>';
+}
+function reviewExam(row){
+  var x = S.learn.log.filter(function(l){ return l.row===row; })[0], ans = {};
+  try { JSON.parse(x.answers||'[]').forEach(function(a){ ans[a.n] = a.a; }); } catch(e){}
+  openModal('<div class="empty">Загрузка…</div>');
+  api('getExam', x.id).then(function(qs){
+    var ok = qs.filter(function(q){ return ans[q.n]; }).length;
+    openModal('<h2><span>'+esc(x.emp)+' · проверка</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      '<div class="note" style="margin-top:0">Отвечено: '+ok+' из '+qs.length+'</div>'+
+      qs.map(function(q){ return '<div class="qa"><b>'+q.n+'.</b> '+esc(q.q)+'<div style="margin-top:6px"><span class="tag">ответ</span> '+(ans[q.n]?esc(ans[q.n]):'<i style="color:var(--mute)">нет ответа</i>')+'</div>'+
+        '<div class="note" style="margin-top:4px"><span class="tag ok">эталон</span> '+esc(q.a||'—')+'</div></div>'; }).join('')+
+      '<label class="f">Комментарий стажёру<textarea id="g_comment"></textarea></label>'+
+      '<div class="acts"><button class="btn bad" onclick="setGrade('+row+',\'Незачёт\')">Незачёт</button><button class="btn" onclick="setGrade('+row+',\'Зачёт\')">Зачёт</button></div>');
+  }).catch(function(){ closeModal(); });
+}
+function setGrade(row, grade){
+  var x = S.learn.log.filter(function(l){ return l.row===row; })[0], c = $('g_comment').value.trim();
+  x.grade = grade; x.comment = c;
+  closeModal(); render(); toast('Оценка сохранена');
+  api('gradeExam', row, grade, c).catch(function(){});
+}
+
+// ---------- команда (руководитель) ----------
+function vTeam(){
+  var v=$('view'), list = S.data.team || [], emps = S.data.emps || [];
+  S.emps = emps;
+  var act = emps.filter(function(e){ return e.active; }), off = emps.filter(function(e){ return !e.active; });
+  v.innerHTML = '<div class="card"><h3>Итоги за '+MON[+S.month.slice(5,7)-1].toLowerCase()+'</h3><div class="scroll"><table><tr><th>Сотрудник</th><th class="n">Заказы</th><th class="n">План</th><th class="n">Звонки</th><th class="n">Встречи</th><th class="n">Договоры</th><th class="n">ЗП</th><th class="n">Задачи</th></tr>'+
+    list.map(function(e){
+      var r = e.plan.sum ? Math.round(e.fact.sum/e.plan.sum*100)+'%' : '—';
+      return '<tr onclick="pick(\''+esc(e.name)+'\');go(\'plan\')" style="cursor:pointer"><td><b>'+esc(e.name)+'</b></td><td class="n">'+money(e.fact.sum)+'</td><td class="n">'+r+'</td><td class="n">'+e.fact.calls+(e.plan.calls?' / '+e.plan.calls:'')+'</td><td class="n">'+(e.fact.warm+e.fact.cold)+'</td><td class="n">'+e.fact.deals+(e.plan.deals?' / '+e.plan.deals:'')+'</td><td class="n">'+(e.salary==null?'—':money(e.salary))+'</td><td class="n">'+e.open+'</td></tr>';
+    }).join('')+'</table></div><div class="note">Нажмите на сотрудника, чтобы открыть его план.</div></div>'+
+    attCard(act)+
+    '<div class="card"><h3 style="display:flex;align-items:center"><span style="flex:1">Сотрудники</span><button class="btn sm" onclick="editEmp()">+ Добавить</button></h3>'+
+    act.map(function(e){ var i=emps.indexOf(e); return '<div class="item" style="cursor:default"><div class="t"><b>'+esc(e.name)+'</b><span class="tag '+(e.role==='Руководитель'?'vio':'gray')+'">'+esc(e.role)+'</span></div>'+(e.email||e.phone?'<div class="s">'+esc(e.email||e.phone)+'</div>':'')+
+      '<div class="bar" style="margin:8px 0 0"><span class="code" id="c'+i+'">•••</span><button class="btn ghost sm" onclick="showCode('+i+')">показать код</button><span class="sp"></span><button class="btn sec sm" onclick="editEmp('+i+')">Изменить</button></div></div>'; }).join('')+
+    (off.length?'<div class="sec-t">Удалённые</div>'+off.map(function(e){ var i=emps.indexOf(e); return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><span style="flex:1;color:var(--mute)">'+esc(e.name)+'</span><button class="btn sec sm" onclick="restoreEmp('+i+')">Вернуть</button></div>'; }).join(''):'')+
+    '<div class="note">Код входа сотрудник вводит один раз на своём телефоне. Удалённый сотрудник сразу теряет вход в программу и доступ к таблице.</div></div>'+
+    '<div class="card"><h3>Telegram-бот</h3>'+(S.tg&&S.tg.bot?'<div class="note" style="margin-top:0">Подключён бот <b>@'+esc(S.tg.bot)+'</b>. Сотрудники подключаются кнопкой 🔔 вверху.</div>':'<div class="note" style="margin-top:0">Вставьте токен, который выдал @BotFather.</div>')+
+    '<div class="bar" style="margin:8px 0 0"><input id="tg_token" type="password" autocomplete="off" placeholder="Токен бота"><button class="btn sec sm" onclick="saveTgToken()">'+(S.tg&&S.tg.bot?'Заменить':'Подключить')+'</button></div></div>';
+}
+// Кто вышел на работу сегодня и сколько дней отметился за месяц.
+function attCard(act){
+  var a = S.data.att || {}, t = a.d === S.today ? a.today || {} : {}, days = a.days || {};
+  return '<div class="card"><h3>Табель · сегодня</h3><table><tr><th>Сотрудник</th><th>Пришёл</th><th>Отчёт</th><th class="n">Дней за '+MON[+S.month.slice(5,7)-1].toLowerCase()+'</th></tr>'+
+    act.map(function(e){ var x = t[e.name] || []; return '<tr><td>'+esc(e.name)+'</td><td>'+(x[0]?'<span class="tag ok">'+esc(x[0])+'</span>':'<span class="tag gray">нет</span>')+'</td><td>'+(x[1]?'<span class="tag ok">'+esc(x[1])+'</span>':'<span class="tag gray">нет</span>')+'</td><td class="n">'+(days[e.name]||0)+'</td></tr>'; }).join('')+
+    '</table><div class="note">Пришёл — кнопка «🟢 Я на работе» или «✅ Выполнено» на задаче «Отметиться» в Telegram. Отчёт — отчёт за день (у остальных — «🏁 День завершён» или выполненная задача «Выслать отчёт»). Всё пишется в лист «Табель».</div></div>';
+}
+function showCode(i){ $('c'+i).textContent = S.emps[i].code; }
+function editEmp(i){
+  var e = i===undefined ? {name:'', role:'Менеджер', email:'', phone:''} : S.emps[i];
+  var isNew = i===undefined;
+  openModal('<h2><span>'+(isNew?'Новый сотрудник':esc(e.name))+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    (isNew?'<label class="f">Имя (как в колонке «Менеджер» заказов)<input id="e_name"></label>':'')+
+    '<label class="f">Роль<select id="e_role">'+['Менеджер','Руководитель','Офис-менеджер','Кладовщик','Курьер','Стажёр'].map(function(r){ return '<option'+(e.role===r?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></label>'+
+    '<label class="f">Почта Google<input id="e_email" type="email" value="'+esc(e.email)+'"></label>'+
+    '<label class="f">Телефон<input id="e_phone" inputmode="tel" value="'+esc(e.phone)+'"></label>'+
+    '<div class="row2"><label class="f">Оклад, ₽'+(isNew?'':' (пусто — не менять)')+'<input id="e_sal" inputmode="numeric"></label><label class="f">Бонус за качество, ₽<input id="e_qb" inputmode="numeric"></label></div>'+
+    '<label class="chk"><input type="checkbox" id="e_acc"> Дать доступ к самой таблице (редактор)</label>'+
+    (isNew?'<div class="note">Будет создан лист «Имя. ЗП» по образцу Екатерины и личный код входа. Это занимает около 10 секунд.</div>':'')+
+    '<div class="acts">'+(isNew?'':'<button class="btn bad" onclick="removeEmp(\''+esc(e.name)+'\')">Удалить</button><button class="btn sec" onclick="newCode(\''+esc(e.name)+'\')">Новый код</button>')+'<button class="btn" id="e_save" onclick="saveEmp('+(isNew?'':'\''+esc(e.name)+'\'')+')">Сохранить</button></div>');
+}
+function saveEmp(name){
+  var e = {name: name || $('e_name').value.trim(), edit: !!name, role:$('e_role').value, email:$('e_email').value.trim(), phone:$('e_phone').value.trim(),
+    salary:$('e_sal').value.trim(), qbonus:$('e_qb').value.trim(), access:$('e_acc').checked};
+  $('e_save').disabled = true; $('e_save').textContent = 'Сохраняю…';
+  api('saveEmployee', e).then(function(code){ closeModal(); toast(name?'Сохранено':'Сотрудник добавлен, код: '+code); refreshTeam(); }).catch(function(){ $('e_save').disabled=false; $('e_save').textContent='Сохранить'; });
+}
+function removeEmp(name){
+  confirmBox('Удалить '+name+'? Вход в программу и доступ к таблице будут закрыты. Заказы и лист ЗП сохранятся.', function(){
+    closeModal(); toast('Удаляю…');
+    api('removeEmployee', name).then(function(){ toast('Сотрудник удалён'); refreshTeam(); }).catch(function(){});
+  });
+}
+function restoreEmp(i){ var e=S.emps[i]; toast('Возвращаю…'); api('saveEmployee', {name:e.name, role:e.role, email:e.email, phone:e.phone, salary:'', qbonus:''}).then(function(){ toast('Сотрудник возвращён'); refreshTeam(); }).catch(function(){}); }
+function newCode(name){ api('resetCode', name).then(function(c){ closeModal(); toast('Новый код для '+name+': '+c); refreshTeam(); }).catch(function(){}); }
+function refreshTeam(){
+  api('boot', priceVer()).then(function(b){ var d=b.data; delete b.data; var lite=Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite)); applyBoot(b); if (d.month===S.month) setData(d); render(); refresh(); });
+}
+// подтверждение без системного окна confirm()
+function confirmBox(text, ok){
+  openModal('<h2><span>Подтвердите</span></h2><div style="margin:8px 0 4px">'+esc(text)+'</div><div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn bad" id="cb_ok">Да, удалить</button></div>');
+  $('cb_ok').onclick = ok;
+}
+
+function openModal(html){ $('sheet').innerHTML=html; $('modal').classList.remove('hidden'); document.body.style.overflow='hidden'; }
+function closeModal(){ $('modal').classList.add('hidden'); document.body.style.overflow=''; }
+
+S.token = URLKEY || store('dd_tok') || '';
+if (URLKEY) store('dd_tok', URLKEY);
+if (S.token) start(); else showLogin();
+</script>
+</body>
+</html>
