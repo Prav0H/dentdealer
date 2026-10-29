@@ -98,6 +98,16 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .task input[type=checkbox]{width:22px;height:22px;flex:none;margin-top:1px}
 .task .b{flex:1;cursor:pointer}
 .task.done .b>div:first-child{text-decoration:line-through;color:var(--mute)}
+.ftabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.ftabs button{border:1px solid var(--line);background:var(--card);color:var(--mute);border-radius:20px;padding:7px 12px;font-weight:600;cursor:pointer}
+.ftabs button.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.ftabs button small{font-weight:500;opacity:.8}
+.ftabs button.add{border-style:dashed;color:var(--pri)}
+.rs{display:flex;gap:8px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.rs.off{opacity:.5}
+.rs-n{min-width:24px;height:24px;border-radius:12px;background:var(--pri-soft);color:var(--pri);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.rs-b{flex:1;min-width:0}
+.rs-m{display:flex;flex-direction:column;gap:4px}
 .sec-t{font-size:13px;color:var(--mute);margin:16px 2px 6px;text-transform:uppercase;letter-spacing:.04em}
 #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 #login .card{width:100%;max-width:340px;text-align:center;padding:24px}
@@ -114,6 +124,14 @@ button.tag{border:0;cursor:pointer;font:inherit;font-size:12px}
 .menu{position:fixed;z-index:15;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.15);padding:4px;min-width:150px}
 .menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:8px;cursor:pointer}
 .menu button:hover,.menu button.on{background:var(--pri-soft);color:var(--pri)}
+.tw{overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;max-height:calc(100vh - 230px)}
+table.ot{border-collapse:collapse;width:100%;font-size:13px;min-width:1180px}
+.ot th{position:sticky;top:0;z-index:1;background:#f6f7f9;text-align:left;padding:8px 10px;font-weight:600;color:var(--mute);white-space:nowrap;border-bottom:1px solid var(--line)}
+.ot td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.ot tbody tr{cursor:pointer}.ot tbody tr:hover td{background:var(--pri-soft)}.ot tr.saving td{opacity:.6}
+.ot .num{text-align:right;white-space:nowrap}.ot .tag{white-space:nowrap}
+body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:nth-child(5) .cl{min-width:160px}.ot td:nth-child(3){min-width:150px}
+.ot .cl{max-width:230px;white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .seg{display:flex;background:#e9edf3;border-radius:10px;padding:3px;margin:12px 0}
 .seg button{flex:1;border:0;background:none;padding:8px;border-radius:8px;cursor:pointer;color:var(--mute);font-weight:600}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -175,9 +193,16 @@ var GAS = !!(window.google && google.script && google.script.run); // откры
 if (!URLKEY && !GAS) { try { URLKEY = (new URLSearchParams(location.search).get('k') || '').replace(/[^\w-]/g, ''); } catch(e){} }
 var S = { token: '', me: null, team: [], price: [], rate: 105, today: '', month: '', mgr: '', tab: 'orders', data: null, cache: {} };
 var MON = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-var STATUSES = ['Новый','Создан','Собран','Оплачен','Доставлен'];
-function stCls(st){ return st==='Доставлен'||st==='Оплачен'?'ok':st==='Собран'?'vio':st==='Новый'?'warn':'gray'; }
+var STATUSES = ['Создан','Собран','Доставлен']; // новый заказ — без статуса; статус ставят бухгалтер и склад
+function stCls(st){ return st==='Доставлен'?'ok':st==='Собран'?'vio':st==='Создан'?'gray':'warn'; }
+function stLbl(st){ return st || 'Без статуса'; }
 function wh(){ return S.me.role==='Кладовщик' || S.me.role==='Курьер'; }
+function canSt(){ return !!S.me.st; } // может менять статус заказа
+function cashless(v){ return /безнал|б\/н|^бн$/i.test(String(v||'')); }
+function courier(){ return S.me.role==='Курьер'; }
+// бухгалтер, склад и курьер видят заказы таблицей, как в рабочем файле (на узком экране — карточками)
+function tableMode(){ return (S.me.acc || wh() || S.me.role==='Офис-менеджер') && innerWidth >= 760; }
+window.addEventListener('resize', function(){ if (S.me && S.tab==='orders' && tableMode()!==S.lastTable) drawOrders(); });
 var PM = [['calls','Звонки с новыми лидами'],['warm','Встречи с тёплыми клиентами'],['cold','Встречи с холодными клиентами'],['deals','Заключённые договоры'],['sum','Сумма заказов']];
 
 function $(id){ return document.getElementById(id); }
@@ -308,7 +333,7 @@ function applyBoot(b){
   // вкладки по роли: склад и курьер — только заказы (сборка/доставка), задачи и регламенты
   var ordLabel = b.me.role==='Кладовщик' ? 'Сборка' : b.me.role==='Курьер' ? 'Доставка' : 'Заказы';
   var tabs = b.me.role==='Стажёр' ? [['learn','🎓','Обучение']] : [['orders','📦',ordLabel]];
-  if (b.me.edit) tabs.push(['clients','🏥','Клиенты']);
+  if (b.me.edit && !b.me.acc) tabs.push(['clients','🏥','Клиенты']); // бухгалтеру — только заказы
   tabs.push(['tasks','✅','Задачи']);
   if (b.me.sales) tabs.push(['stats','🎯','Итоги']);
   tabs.push(['kb','📚','База']);
@@ -345,6 +370,7 @@ function markTab(){
   Array.prototype.forEach.call(document.querySelectorAll('nav button'), function(b){ b.classList.toggle('on', b.dataset.t===S.tab); });
 }
 function go(t){
+  if (t!=='orders') document.body.classList.remove('wide');
   S.tab=t; store('dd_tab', t); markTab(); render();
 }
 function shiftMonth(d){
@@ -371,7 +397,7 @@ function attBar(){
   if (!S.data || !S.data.att) return;
   var bar = function(text, btn){ $('view').insertAdjacentHTML('afterbegin', '<div class="card" style="display:flex;align-items:center;gap:10px"><span style="flex:1">'+text+'</span>'+btn+'</div>'); };
   if (!hm) bar('Вы ещё не отметились сегодня', '<button class="btn" onclick="checkIn()">🟢 Я на работе</button>');
-  else if (!end && hmNow() >= '17:00') bar('Конец дня — отправьте отчёт', S.me.sales
+  else if (!end && hmNow() >= '17:00') bar(S.me.sales ? 'Конец дня — отправьте отчёт' : 'Конец дня — отметьте завершение', S.me.sales
     ? (S.tab==='stats' && (S.statTab||'plan')==='plan' ? '' : '<button class="btn" onclick="S.statTab=\'plan\';go(\'stats\')">📝 Отчёт за день</button>')
     : '<button class="btn" onclick="endDay()">🏁 День завершён</button>');
 }
@@ -405,7 +431,7 @@ function vOrders(){
   var chips = '<div class="seg" style="flex-wrap:wrap">'+OFILTERS().map(function(c){
     return '<button class="'+(S.of===c[0]?'on':'')+'" onclick="S.of=\''+c[0]+'\';refreshList();vOrdersChips()">'+c[1]+'</button>'; }).join('')+
     '<button class="'+(S.range?'on':'')+'" onclick="pickRange()">📅 '+(S.range?esc(rangeLabel()):'Период')+'</button></div>';
-  v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск по всем месяцам: клиент, артикул, счёт" value="'+esc(Q)+'">'+(S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+'</div><div id="ochips">'+chips+'</div><div id="ost"></div><div class="list" id="olist"></div>';
+  v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск по всем месяцам: клиент, артикул, счёт" value="'+esc(Q)+'">'+(S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+(courier()||S.me.boss?'<button class="btn sec" onclick="routeSheet()">🗺 Маршрут</button>':'')+'</div><div id="ochips">'+chips+'</div><div id="ost"></div><div class="list" id="olist"></div>';
   var t; $('q').oninput=function(){ clearTimeout(t); t=setTimeout(function(){ Q=$('q').value.trim(); refreshList(); },400); };
   if (keepFocus){ var q=$('q'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
   drawOrders();
@@ -440,26 +466,44 @@ function drawOrders(){
   if (!$('olist')) return;
   if (remoteKey() && !QR){ if (QKEY !== remoteKey()) refreshList(); return; }
   var list = ordersNow(), mgr = cur();
-  if (S.of === 'unpaid') list = list.filter(function(o){ return !o.paid; });
-  else if (S.of) list = list.filter(function(o){ return (o.status||'Создан')===S.of; });
+  var isPaid = function(o){ return !!o.paid; }; // отметка «Оплачен» ставится вручную для любого заказа
+  if (S.of === 'unpaid') list = list.filter(function(o){ return !isPaid(o); });
+  else if (S.of) list = list.filter(function(o){ return S.of==='none' ? !o.status : o.status===S.of; });
   S.orders = list;
   var sum=0, paid=0, bonus=0;
-  list.forEach(function(o){ sum+=o.sum; if(o.paid){ paid+=o.sum; if(o.bonus) bonus+=o.bonus.sum; } });
+  list.forEach(function(o){ sum+=o.sum; if(isPaid(o)){ paid+=o.sum; if(o.bonus) bonus+=o.bonus.sum; } });
   $('ost').innerHTML = '<div class="stats"><div class="stat"><small>Заказов</small><b>'+list.length+'</b></div><div class="stat"><small>На сумму</small><b>'+money(sum)+'</b></div><div class="stat"><small>Оплачено</small><b>'+money(paid)+'</b></div>'+
     (mgr&&S.me.sales?'<div class="stat"><small>'+(S.of==='unpaid'?'Бонус после оплаты':'Бонус с оплаченных')+'</small><b>'+money(S.of==='unpaid'?list.reduce(function(a,o){ return a+(o.bonus?o.bonus.sum:0); },0):bonus)+'</b></div>':'')+'</div>' +
     (S.of==='unpaid'&&!Q&&!S.range?'<div class="note" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(S.unpaidAll?'Неоплаченные за всё время':'Неоплаченные за '+MON[+S.month.slice(5,7)-1].toLowerCase())+
       ' <button class="btn sec sm" onclick="S.unpaidAll=!S.unpaidAll;render();refreshList()">'+(S.unpaidAll?'Только этот месяц':'За всё время')+'</button></div>':
      Q?'<div class="note">Найдено по всем месяцам</div>':S.range?'<div class="note">За период '+esc(rangeLabel())+'</div>':'');
-  $('olist').innerHTML = list.length ? list.map(function(o,i){
-    var st = stCls(o.status);
-    return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
-      '<div class="s">'+dmy(o.date)+(S.me.boss&&!mgr?' · '+esc(o.mgr):'')+(o.dlv?' · доставка '+money(o.dlv):'')+' · '+esc(o.order)+'</div><div class="tags">'+
-      (o.saving?'<span class="tag">записывается…</span>':'')+
-      '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+esc(o.status||'Создан')+' ▾</button>'+
-      (S.me.edit||S.me.acc?'<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>':(o.paid?'<span class="tag ok">Оплачен</span>':''))+
-      (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
-      (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
-  }).join('') : '<div class="empty">Заказов нет</div>';
+  S.lastTable = tableMode();
+  document.body.classList.toggle('wide', S.lastTable); // таблице нужен весь экран
+  $('olist').innerHTML = list.length ? (S.lastTable ? orderTable(list) : list.map(orderCard).join('')) : '<div class="empty">Заказов нет</div>';
+}
+// Кнопка статуса (меню — только тем, кто может его менять) и отметка оплаты (безнал — всегда оплачен).
+function stBtn(o,i){ var st = stCls(o.status); return canSt() ? '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+esc(stLbl(o.status))+' ▾</button>' : '<span class="tag '+st+'">'+esc(stLbl(o.status))+'</span>'; }
+function paidBtn(o,i){
+  return S.me.edit ? '<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>' : (o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>');
+}
+function orderCard(o,i){
+  var mgr = cur();
+  return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
+    '<div class="s">'+dmy(o.date)+(S.me.all&&!mgr?' · '+esc(o.mgr):'')+' · '+esc(o.order)+'</div>'+(wh()&&o.addr?'<div class="s">📍 '+esc(addrLine(o.addr)||o.addr)+'</div>':'')+'<div class="tags">'+
+    (wh()&&o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
+    (o.saving?'<span class="tag">записывается…</span>':'')+stBtn(o,i)+paidBtn(o,i)+
+    (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
+    (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
+}
+// Таблица как в рабочем файле: статус, менеджер, клиент, адрес, заказ, скидка, сумма, торгующая, счёт, нал/безнал, даты, оплата.
+// СДЭК, комментарий и стоимость доставки — при открытии заказа.
+function orderTable(list){
+  var td = function(h, cls){ return '<td'+(cls?' class="'+cls+'"':'')+'>'+h+'</td>'; };
+  return '<div class="tw"><table class="ot"><thead><tr><th>Статус</th><th>Менеджер</th><th>Клиент</th><th>Адрес</th><th>Заказ</th><th class="num">Скидка</th><th class="num">Сумма</th><th>Торг.</th><th>Счёт</th><th>Нал/безнал</th><th>Дата</th><th>Отгрузка</th><th>Доставка</th><th>Оплачен</th></tr></thead><tbody>'+
+    list.map(function(o,i){
+      return '<tr'+(o.saving?' class="saving"':'')+' onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')">'+td(stBtn(o,i))+td(esc(o.mgr))+td('<b>'+esc(o.client)+'</b>')+td('<div class="cl">'+esc(o.addr)+'</div>')+td('<div class="cl">'+esc(o.order)+'</div>')+
+        td(o.disc?pct(o.disc):'','num')+td(money(o.sum),'num')+td(o.trade?'да':'')+td(esc(o.inv))+td(esc(o.cash))+td(dmy(o.date),'num')+td(dmy(o.ship),'num')+td(dmy(o.deliv),'num')+td(paidBtn(o,i))+'</tr>';
+    }).join('')+'</tbody></table></div>';
 }
 
 // Телефоны из текста: «Руслан +7 925 530-32-37» → [{label, num}]
@@ -478,28 +522,71 @@ function phonesOf(text){
 function callButtons(text){
   return phonesOf(text).slice(0,6).map(function(p){ return '<a class="btn sec" style="text-decoration:none;text-align:center" href="tel:'+p.num+'">📞 '+esc(p.label||p.show)+'</a>'; }).join('');
 }
-// маршрут в Яндекс Картах от текущего места до адреса
+// адрес без телефонов — первая строка поля «Адрес»
+function addrLine(addr){ return String(addr||'').split('\n')[0].replace(/(\+7|8)[\d\s\-()]{9,}/g,'').trim(); }
+function isAddr(a){ return a && !/самовывоз|сдэк|cdek|пвз/i.test(a); }
+// маршрут в Яндекс Картах от текущего места до адреса (или по нескольким адресам подряд)
+function mapsUrl(addrs){ return 'https://yandex.ru/maps/?rtext=~'+addrs.map(encodeURIComponent).join('~')+'&rtt=auto'; }
 function routeButton(addr){
-  var first = String(addr||'').split('\n')[0].replace(/(\+7|8)[\d\s\-()]{9,}/g,'').trim();
-  if (!first || /самовывоз/i.test(first)) return '';
-  return '<a class="btn sec" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://yandex.ru/maps/?rtext=~'+encodeURIComponent(first)+'&rtt=auto">🗺 Маршрут</a>';
+  var first = addrLine(addr);
+  if (!isAddr(first)) return '';
+  return '<a class="btn sec" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="'+mapsUrl([first])+'">🗺 Маршрут</a>';
+}
+// Маршрутный лист курьера: собранные заказы с адресом, на сегодня — отмечены, порядок можно менять,
+// одна кнопка открывает весь маршрут в Яндекс Картах (от текущего места по всем точкам).
+var RS = { order: [], sel: {} };
+function rk(o){ return o.sheet+':'+o.row; }
+function routeList(){ return (S.data.orders||[]).filter(function(o){ return o.status==='Собран' && isAddr(addrLine(o.addr)); }); }
+function routeSheet(){
+  var list = routeList(), keys = list.map(rk);
+  if (!RS.order.length || RS.order.some(function(k){ return keys.indexOf(k)<0; }) || keys.some(function(k){ return RS.order.indexOf(k)<0; })){
+    // сначала на сегодня и просроченные, потом без даты, потом будущие
+    var kf = function(o){ return (o.deliv ? (o.deliv <= S.today ? '0'+o.deliv : '2'+o.deliv) : '1') + o.client; };
+    list.sort(function(a,b){ return kf(a) < kf(b) ? -1 : kf(a) > kf(b) ? 1 : 0; });
+    RS.order = list.map(rk); RS.sel = {};
+    list.forEach(function(o){ RS.sel[rk(o)] = !o.deliv || o.deliv <= S.today; });
+  }
+  var by = {}; list.forEach(function(o){ by[rk(o)] = o; });
+  var picked = RS.order.filter(function(k){ return RS.sel[k]; }).map(function(k){ return addrLine(by[k].addr); });
+  openModal('<h2><span>Маршрутный лист · '+dmy(S.today)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    (list.length ? '<div class="note">Отмечены заказы на сегодня и без даты доставки. Порядок точек меняется стрелками, маршрут строится от вашего местоположения по отмеченным адресам.</div>'+
+    RS.order.map(function(k,n){ var o = by[k], ph = phonesOf(o.addr+'\n'+o.comment)[0];
+      return '<div class="rs'+(RS.sel[k]?'':' off')+'"><label class="chk" style="margin:0"><input type="checkbox"'+(RS.sel[k]?' checked':'')+' onchange="RS.sel[\''+k+'\']=this.checked;routeSheet()"></label>'+
+        '<div class="rs-n">'+(n+1)+'</div><div class="rs-b"><b>'+esc(o.client)+'</b><div class="s">'+esc(addrLine(o.addr))+'</div><div class="tags">'+
+        (o.deliv?'<span class="tag '+(o.deliv<S.today?'warn':'gray')+'">'+(o.deliv<S.today?'просрочено ':'')+dmy(o.deliv)+'</span>':'<span class="tag gray">без даты</span>')+'<span class="tag gray">'+money(o.sum)+'</span>'+(o.paid?'':'<span class="tag warn">не оплачен</span>')+'</div>'+
+        '<div class="acts" style="margin-top:6px;flex-wrap:wrap">'+(ph?'<a class="btn sec sm" style="text-decoration:none" href="tel:'+ph.num+'">📞</a>':'')+
+        '<a class="btn sec sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+mapsUrl([addrLine(o.addr)])+'">🗺</a>'+
+        (canSt()?'<button class="btn sm" onclick="delivered(\''+k+'\')">✓ Доставлен</button>':'')+'</div></div>'+
+        '<div class="rs-m"><button class="btn ghost sm" '+(n?'':'disabled ')+'onclick="moveRoute('+n+',-1)">↑</button><button class="btn ghost sm" '+(n<RS.order.length-1?'':'disabled ')+'onclick="moveRoute('+n+',1)">↓</button></div></div>'; }).join('')+
+    '<div class="acts"><a class="btn'+(picked.length?'':' ghost')+'" style="text-decoration:none;text-align:center;flex:1" target="_blank" rel="noopener" href="'+(picked.length?mapsUrl(picked):'#')+'">🗺 Открыть маршрут ('+picked.length+')</a></div>'
+    : '<div class="card empty">Собранных заказов с адресом доставки нет</div>'));
+}
+function moveRoute(n, d){ var k = RS.order.splice(n,1)[0]; RS.order.splice(n+d,0,k); routeSheet(); }
+function delivered(k){
+  var o = (S.data.orders||[]).filter(function(x){ return rk(x)===k; })[0]; if (!o) return;
+  o.status = 'Доставлен'; if (!o.deliv) o.deliv = S.today;
+  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:'Доставлен', paid:null}); });
+  toast('Заказ «'+o.client+'» доставлен'); routeSheet();
 }
 
 // Карточка заказа для склада и курьера: адрес, маршрут, звонок, состав и кнопки статуса.
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
-function OFILTERS(){ var w = wh(); return [['','Все'],['unpaid','Не оплачены'],['Новый',w?'Новые':'Новый'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Оплачен','Оплачен'],['Доставлен',w?'Доставлены':'Доставлен']]; }
-function vOrdersChips(){ Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ b.classList.toggle('on', OFILTERS()[k][0]===S.of); }); }
+function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Без статуса'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
+function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
 function viewOrder(i){
-  var o = S.orders[i], first = (o.addr||'').split('\n')[0];
-  var phones = (o.addr+' '+o.comment).match(/\+?[78][\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}/g) || [];
+  var o = S.orders[i];
   openModal('<h2><span>'+esc(o.client)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
-    '<div class="tags" style="margin:0 0 10px"><span class="tag gray">'+dmy(o.date)+'</span><span class="tag">'+esc(o.status||'Создан')+'</span>'+(o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>')+'<span class="tag gray">'+esc(o.mgr)+'</span>'+(o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+'</div>'+
+    '<div class="tags" style="margin:0 0 10px"><span class="tag gray">'+dmy(o.date)+'</span><span class="tag '+stCls(o.status)+'">'+esc(stLbl(o.status))+'</span>'+
+    (o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>')+(o.cash?'<span class="tag gray">'+esc(o.cash)+'</span>':'')+
+    '<span class="tag gray">'+esc(o.mgr)+'</span>'+(o.inv?'<span class="tag gray">счёт '+esc(o.inv)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+'</div>'+
     '<div class="card" style="margin-top:0"><div class="note" style="margin:0 0 4px">Адрес и контакты</div><div style="white-space:pre-line">'+esc(o.addr||'—')+'</div>'+
     '<div class="acts" style="margin-top:10px;flex-wrap:wrap">'+routeButton(o.addr)+callButtons(o.addr+'\n'+o.comment)+'</div></div>'+
     '<div class="card"><div class="note" style="margin:0 0 4px">Состав заказа</div><div style="white-space:pre-line">'+esc(o.order)+'</div>'+
+    '<div class="tags" style="margin-top:8px"><span class="tag">'+money(o.sum)+'</span>'+(o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.dlv?'<span class="tag gray">доставка '+money(o.dlv)+'</span>':'')+
+    (o.ship?'<span class="tag gray">отгрузка '+dmy(o.ship)+'</span>':'')+(o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+'</div>'+
     (o.comment?'<div class="note">Комментарий: '+esc(o.comment)+'</div>':'')+(o.cdek?'<div class="note">Трек-номер СДЭК: '+esc(o.cdek)+'</div>':'')+'</div>'+
-    '<div class="sec-t">Поставить статус</div><div class="acts" style="margin-top:0">'+STATUSES.map(function(s){
-      return '<button class="btn '+(s===(o.status||'Создан')?'':'sec')+'" onclick="closeModal();setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('')+'</div>');
+    (canSt()?'<div class="sec-t">Поставить статус</div><div class="acts" style="margin-top:0">'+STATUSES.map(function(s){
+      return '<button class="btn '+(s===o.status?'':'sec')+'" onclick="closeModal();setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('')+'</div>':''));
 }
 
 // Статус и оплата — прямо в списке, без открытия заказа.
@@ -509,7 +596,7 @@ function statusMenu(i, ev){
   ev.stopPropagation(); closeMenu();
   var o = S.orders[i], r = ev.target.getBoundingClientRect(), m = document.createElement('div');
   m.className = 'menu'; m.id = 'menu';
-  m.innerHTML = STATUSES.map(function(s){ return '<button class="'+(s===o.status?'on':'')+'" onclick="setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('');
+  m.innerHTML = [''].concat(STATUSES).map(function(s){ return '<button class="'+(s===(o.status||'')?'on':'')+'" onclick="setState('+i+',\''+s+'\',null)">'+stLbl(s)+'</button>'; }).join('');
   document.body.appendChild(m);
   m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 8) + 'px';
   m.style.top = (r.bottom + m.offsetHeight + 8 > innerHeight ? r.top - m.offsetHeight - 4 : r.bottom + 4) + 'px';
@@ -524,17 +611,18 @@ function afterSave(o, fn){
 function setState(i, status, paid){
   closeMenu();
   var o = S.orders[i];
-  if (status !== null){ o.status = status; if (status==='Оплачен') o.paid = true; }
+  if (status !== null) o.status = status;
   if (paid !== null) o.paid = paid;
   drawOrders();
-  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:o.status, paid:o.paid}); });
+  // на сервер уходит только то, что изменили: статус или оплата
+  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:status, paid:paid}); });
 }
 
 // Подсказка клиентов: выбрал — подставились адрес, скидка и «торгующая».
 function clientSuggest(inp, box, onPick){
   var q = inp.value.trim().toLowerCase();
   if (q.length < 2){ box.innerHTML=''; return; }
-  var res = (S.data.clients||[]).filter(function(c){ return c.name.toLowerCase().indexOf(q)>=0 || c.addr.toLowerCase().indexOf(q)>=0; }).slice(0,8);
+  var res = (S.data.clients||[]).filter(function(c){ return [c.name,c.addr,c.legal,c.alias].join(' ').toLowerCase().indexOf(q)>=0; }).slice(0,8);
   box.innerHTML = res.length ? '<div class="sug">'+res.map(function(c){
     return '<div data-n="'+esc(c.name)+'"><b>'+esc(c.name)+'</b>'+(c.disc?' · скидка '+pct(c.disc):'')+'<br><small>'+esc(c.addr.split('\n')[0]).slice(0,90)+'</small></div>';
   }).join('')+'</div>' : '';
@@ -547,25 +635,27 @@ var F = null; // форма заказа
 function editOrder(i, preset){
   var o = i===undefined || i===null ? null : S.orders[i];
   S.today = localToday();
-  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'Новый', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.om || S.me.name };
+  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.om || S.me.name };
   if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = preset.disc; F.trade = preset.trade; }
-  F.lines=[];
-  if (o) F.orig = {mgr:o.mgr, client:o.client, date:o.date};
-  var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+S.sales.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
+  F.lines=[]; F.extra = F.order;
+  if (o){ F.orig = {mgr:o.mgr, client:o.client, date:o.date}; parseLines(); }
+  var mgrs = S.sales.indexOf(F.mgr)>=0 ? S.sales : [F.mgr].concat(S.sales); // бухгалтер оформляет и свои заказы
+  var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+mgrs.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
   openModal('<h2><span>'+(o?'Заказ':'Новый заказ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
     mgrSel+(S.me.assist?'<div class="note" style="margin-top:0">Заказ оформляется от имени: <b>'+esc(fio(S.me.om))+'</b></div>':'')+
-    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус<select id="f_status">'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></label></div>'+
+    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус'+(canSt()?'<select id="f_status"><option value="">Без статуса</option>'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'<input value="'+esc(stLbl(F.status))+'" disabled title="Статус ставят бухгалтер и склад">')+'</label></div>'+
     '<label class="f">Клиент<input id="f_client" autocomplete="off" placeholder="Начните вводить название" value="'+esc(F.client)+'"></label><div id="f_csug"></div>'+
     '<label class="f">Адрес доставки / контакты<textarea id="f_addr">'+esc(F.addr)+'</textarea></label>'+
+    '<div class="tags" style="margin-top:6px"><button class="tag gray" onclick="$(\'f_addr\').value=\'Самовывоз\'">Самовывоз</button><button class="tag gray" onclick="addrFromCard()">Адрес из карточки клиента</button></div>'+
     '<label class="f">Товары из прайса<input id="f_find" placeholder="Артикул, название, размер, гранулы, цена…" autocomplete="off"></label><div id="f_sug"></div><div id="f_lines"></div>'+
-    (o?'<label class="f">Состав заказа<textarea id="f_order">'+esc(F.order)+'</textarea></label>':'')+
+    (o?'<label class="f">'+(F.lines.length?'Остальное в заказе (текстом, без цены)':'Состав заказа')+'<textarea id="f_order">'+esc(F.extra)+'</textarea></label>':'')+
     '<div class="row2"><label class="f">Скидка, %<input id="f_disc" inputmode="decimal" value="'+(Math.round(F.disc*1000)/10||'')+'"></label><label class="f">Доставка, ₽<input id="f_dlv" inputmode="decimal" placeholder="0" value="'+(F.dlv||'')+'"></label></div>'+
     '<label class="chk"><input type="checkbox" id="f_trade"'+(F.trade?' checked':'')+'> Торгующая компания (бонус 1,5 %)</label>'+
     '<div class="total"><span>Товары со скидкой</span><span style="display:flex;align-items:center;gap:6px"><input id="f_sum" inputmode="decimal" style="width:130px;text-align:right" value="'+((F.sum||0)-(F.dlv||0)||'')+'"> ₽</span></div>'+
     '<div class="total" style="background:none;padding:6px 12px;margin-top:4px;font-weight:500"><span>Сумма заказа с доставкой</span><span id="f_total"></span></div>'+
     '<div class="note">Курс € — <b id="f_rate">'+S.rate+'</b> ₽ (для торгующей компании — '+S.rateTrade+' ₽). В таблицу пишется сумма с доставкой; скидка, бонус и план считаются без доставки. Сумму товаров можно поправить вручную.</div>'+
-    '<div class="row2"><label class="f">Номер счёта<input id="f_inv" value="'+esc(F.inv)+'"></label><label class="f">Наличка<input id="f_cash" value="'+esc(F.cash)+'"></label></div>'+
-    '<label class="chk"><input type="checkbox" id="f_paid"'+(F.paid?' checked':'')+'> Оплачен</label>'+
+    '<div class="row2"><label class="f">Номер счёта<input id="f_inv" value="'+esc(F.inv)+'"></label><label class="f">Нал / безнал<select id="f_cash" onchange="cashChanged()"><option value="">—</option><option'+(F.cash==='Нал'?' selected':'')+'>Нал</option><option'+(F.cash==='Безнал'?' selected':'')+'>Безнал</option>'+(F.cash&&F.cash!=='Нал'&&F.cash!=='Безнал'?'<option selected>'+esc(F.cash)+'</option>':'')+'</select></label></div>'+
+    '<label class="chk"><input type="checkbox" id="f_paid"'+(F.paid?' checked':'')+'> Оплачен <small id="f_paid_n" style="color:var(--mute)"></small></label>'+
     '<div class="row2"><label class="f">Дата отгрузки<input type="date" id="f_ship" value="'+F.ship+'"></label><label class="f">Дата доставки<input type="date" id="f_deliv" value="'+F.deliv+'"></label></div>'+
     '<label class="f">Трек-номер СДЭК<input id="f_cdek" value="'+esc(F.cdek)+'"></label>'+
     '<label class="f">Комментарий<textarea id="f_comment">'+esc(F.comment)+'</textarea></label>'+
@@ -586,8 +676,29 @@ function editOrder(i, preset){
   };
   ['f_disc','f_dlv','f_sum'].forEach(function(id){ $(id).addEventListener('input', id==='f_sum' ? showTotal : recalc); });
   $('f_trade').onchange = drawLines;
+  F.base0 = linesTotal(); // стоимость распознанных строк на момент открытия — чтобы сумма менялась только на то, что изменили
+  cashChanged();
   drawLines();
 }
+function cashChanged(){ $('f_paid_n').textContent = '— когда деньги получены'; }
+// адрес из карточки клиента (если там настоящий адрес), иначе — из последнего заказа
+function addrFromCard(){
+  var n = $('f_client').value.trim().toLowerCase(), c = (S.data.clients||[]).filter(function(x){ return x.name.toLowerCase()===n; })[0];
+  var a = c && c.addr && !/^самовывоз/i.test(c.addr) ? c.addr : lastAddr(n);
+  if (a) $('f_addr').value = a; else toast('У клиента нет адреса в карточке', true);
+}
+// Состав заказа «BG-B05 - 1 шт, 9003 - 2 уп» → строки с ценами из прайса; что не распозналось — остаётся текстом.
+function parseLines(){
+  var rest = [];
+  String(F.order||'').split(/,\s*/).forEach(function(part){
+    var m = part.trim().match(/^(.+?)\s*-\s*(\d+(?:[.,]\d+)?)\s*(уп|шт)\.?$/i), art = m && m[1].trim().toLowerCase();
+    var p = m && S.price.filter(function(x){ return x.art.toLowerCase()===art; })[0];
+    if (p) F.lines.push({art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:m[3].toLowerCase()==='уп'?'уп':'шт', qty:num(m[2])});
+    else if (part.trim()) rest.push(part.trim());
+  });
+  F.extra = rest.join(', ');
+}
+function linesTotal(){ return F.lines.reduce(function(s,l){ return s + unitPrice(l, l.unit)*l.qty; }, 0); }
 // адрес из последнего заказа клиента, если в карточке пусто
 function lastAddr(name){
   var k = String(name||'').toLowerCase(), o = (S.data.orders||[]).filter(function(x){ return x.client.toLowerCase()===k && x.addr; })[0];
@@ -596,7 +707,8 @@ function lastAddr(name){
 function showTotal(){ if ($('f_total')) $('f_total').textContent = money(num($('f_sum').value) + num($('f_dlv').value)); if ($('f_rate')) $('f_rate').textContent = rate(); }
 // Цена строки за единицу: товары с ценой в рублях — без курса €, остальные — по курсу.
 function unitPrice(p, unit){ return p.rub ? p.rub*(unit==='уп'?(p.perPack||1):1) : (unit==='уп'?p.eurPack:p.eur)*rate(); }
-function simple(t){ return String(t||'').toLowerCase().replace(/ё/g,'е').replace(/х/g,'x').replace(/,/g,'.').replace(/×/g,'x'); }
+var LAT = {'а':'a','в':'b','е':'e','к':'k','м':'m','н':'h','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x'};
+function simple(t){ return String(t||'').toLowerCase().replace(/ё/g,'е').replace(/[авекмнорстух]/g, function(ch){ return LAT[ch]; }).replace(/,/g,'.').replace(/×/g,'x'); }
 // Поиск по любому слову: артикул, название, группа, материал, аналог, размер, гранулы, цена. Все слова запроса должны найтись.
 function priceHay(p){
   if (p._h) return p._h;
@@ -636,10 +748,11 @@ function recalc(keepLines){
     F.lines.forEach(function(l,i){ var el=nodes[i]; if(el && el.nextSibling) el.nextSibling.textContent=' '+money(unitPrice(l, l.unit)*l.qty); });
   }
   if (!$('f_sum')) return;
-  if (F.lines.length){
-    var base = F.lines.reduce(function(s,l){ return s + unitPrice(l, l.unit)*l.qty; }, 0);
-    var sum = base*(1-num($('f_disc').value)/100) + (F.row ? (F.sum||0)-(F.dlv||0) : 0); // без доставки
-    $('f_sum').value = Math.round(sum*100)/100;
+  if (F.lines.length || F.base0){
+    // товары из прайса считаются по ценам и скидке; то, что осталось в заказе текстом (без цены), — по прежней сумме
+    var d = 1-num($('f_disc').value)/100;
+    var rest = F.row ? Math.max(0, ((F.sum||0)-(F.dlv||0)) - (F.base0||0)*(1-(F.disc||0))) : 0;
+    $('f_sum').value = Math.round((linesTotal()*d + rest)*100)/100;
   }
   showTotal();
 }
@@ -649,7 +762,7 @@ function saveOrder(){
   var extra = $('f_order') ? $('f_order').value.trim() : '';
   var o = {
     row: F.row, sheet: F.sheet, orig: F.orig, mgr: $('f_mgr') ? $('f_mgr').value : (S.me.om || S.me.name),
-    date: $('f_date').value, status: $('f_status').value, client: $('f_client').value.trim(), addr: $('f_addr').value,
+    date: $('f_date').value, status: $('f_status') ? $('f_status').value : F.status, client: $('f_client').value.trim(), addr: $('f_addr').value,
     order: [extra, txt].filter(Boolean).join(extra && txt ? ', ' : ''),
     disc: num($('f_disc').value), sum: Math.round((num($('f_sum').value) + num($('f_dlv').value))*100)/100, dlv: num($('f_dlv').value), trade: $('f_trade').checked,
     inv: $('f_inv').value, cash: $('f_cash').value, paid: $('f_paid').checked,
@@ -1096,57 +1209,93 @@ var KQ = '';
 // подсветка найденного и фрагмент текста вокруг первого совпадения
 function hl(t){ var e = esc(t); if (!KQ) return e; var q = esc(KQ).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return e.replace(new RegExp(q,'gi'), function(m){ return '<mark>'+m+'</mark>'; }); }
 function snippet(t){ var i = t.toLowerCase().indexOf(KQ.toLowerCase()); if (i < 0) return esc(t.slice(0,160)); var a = Math.max(0, i-70); return (a?'…':'')+hl(t.slice(a, i+KQ.length+110))+'…'; }
+// База знаний по папкам (вкладки): регламенты менеджера, по продукту, другие, рабочие материалы — руководитель добавляет папки
+// и переносит документы между ними. Поиск ищет по всем папкам сразу. Файлы лежат в папке на Диске, в документе — ссылка.
+function kbFolders(){ return (S.kb && S.kb.folders) || []; }
+function kbIcon(d){ var l = (d.link||'').toLowerCase(); return d.lesson ? '🎓' : /\.pdf|drive\.google|docs\.google/.test(l) ? '📎' : d.link ? '🔗' : '📄'; }
 function vKb(){
   var v = $('view'), keep = document.activeElement && document.activeElement.id==='kq';
   if (!S.kbAll){
     v.innerHTML = '<div class="empty">Загрузка регламентов…</div>';
-    api('getKb').then(function(d){ S.kbAll = d; if (S.tab==='kb') render(); }).catch(function(){});
+    api('getKb').then(function(d){ if (Array.isArray(d)) d = {folders: [], docs: d}; S.kb = d; S.kbAll = d.docs; if (S.tab==='kb') render(); }).catch(function(){});
     return;
   }
+  var folders = kbFolders();
+  if (folders.indexOf(S.kbf) < 0) S.kbf = folders[0] || '';
   var list = S.kbAll.filter(function(d){
-    if (!KQ) return true;
+    if (!KQ) return d.section === S.kbf;
     var all = (d.title+' '+d.section+' '+d.text).toLowerCase(), q = KQ.toLowerCase();
     d.hits = all.split(q).length - 1;
     return d.hits > 0;
-  }).sort(function(a,b){ return KQ ? b.hits - a.hits : 0; });
+  }).sort(function(a,b){ return KQ ? b.hits - a.hits : a.lesson===b.lesson ? 0 : a.lesson ? 1 : -1; });
   S.kbl = list;
-  var secs = [];
-  list.forEach(function(d){ if (secs.indexOf(d.section)<0) secs.push(d.section); });
-  v.innerHTML = '<div class="bar"><input id="kq" placeholder="Поиск по тексту регламентов" value="'+esc(KQ)+'">'+(S.me.boss?'<button class="btn" onclick="editKb()">+ Документ</button>':'')+'</div>'+
-    (list.length ? secs.map(function(s){
-      return '<div class="sec-t">'+esc(s)+'</div>'+list.filter(function(d){ return d.section===s; }).map(function(d){
-        var i = list.indexOf(d);
-        return '<div class="item" onclick="openKb('+i+')"><div class="t"><b>📄 '+hl(d.title)+'</b>'+(KQ&&d.hits?'<span class="tag">совпадений: '+d.hits+'</span>':'')+'</div><div class="s" style="-webkit-line-clamp:3">'+(KQ?snippet(d.text):esc(d.text.slice(0,140)))+'</div>'+
-          '<div class="tags">'+(d.link?'<span class="tag">есть файл</span>':'')+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div></div>';
-      }).join('');
-    }).join('') : '<div class="card empty">'+(KQ?'Ничего не найдено':'Здесь будут регламенты и инструкции.'+(S.me.boss?'<br>Нажмите «+ Документ», чтобы добавить первый.':''))+'</div>');
+  var cnt = {}; S.kbAll.forEach(function(d){ cnt[d.section] = (cnt[d.section]||0)+1; });
+  var secs = []; list.forEach(function(d){ if (secs.indexOf(d.section)<0) secs.push(d.section); });
+  var item = function(d){ var i = list.indexOf(d);
+    return '<div class="item" onclick="openKb('+i+')"><div class="t"><b>'+kbIcon(d)+' '+hl(d.title)+'</b>'+(KQ&&d.hits?'<span class="tag">совпадений: '+d.hits+'</span>':'')+'</div>'+
+      (d.text?'<div class="s" style="-webkit-line-clamp:3">'+(KQ?snippet(d.text):esc(d.text.slice(0,140)))+'</div>':'')+
+      '<div class="tags">'+(d.link?'<span class="tag">файл</span>':'')+(d.lesson?'<span class="tag gray">урок курса</span>':'')+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div></div>'; };
+  v.innerHTML = '<div class="bar"><input id="kq" placeholder="Поиск по всем папкам" value="'+esc(KQ)+'">'+(S.me.boss?'<button class="btn" onclick="editKb()">+ Документ</button>':'')+'</div>'+
+    '<div class="ftabs">'+folders.map(function(f){ return '<button class="'+(f===S.kbf&&!KQ?'on':'')+'" onclick="KQ=\'\';S.kbf=\''+esc(f).replace(/'/g,'&#39;')+'\';render()">'+esc(f)+(cnt[f]?' <small>'+cnt[f]+'</small>':'')+'</button>'; }).join('')+
+      (S.me.boss?'<button class="add" onclick="editFolder()">+ папка</button>':'')+'</div>'+
+    (S.me.boss&&!KQ&&S.kbf?'<div class="note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1">Папка «'+esc(S.kbf)+'»</span><button class="btn ghost sm" onclick="editFolder(S.kbf)">✎ Переименовать</button>'+(S.kb.drive?'<a class="btn ghost sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(S.kb.drive)+'">📁 Файлы на Диске</a>':'')+'</div>':'')+
+    (list.length ? (KQ ? secs.map(function(s){ return '<div class="sec-t">'+esc(s)+'</div>'+list.filter(function(d){ return d.section===s; }).map(item).join(''); }).join('') : list.map(item).join(''))
+      : '<div class="card empty">'+(KQ?'Ничего не найдено':'В этой папке пока пусто.'+(S.me.boss?'<br>Нажмите «+ Документ» или перенесите сюда документ из другой папки.':''))+'</div>');
   var t; $('kq').oninput = function(){ clearTimeout(t); t = setTimeout(function(){ KQ = $('kq').value.trim(); render(); }, 300); };
   if (keep){ var q=$('kq'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+}
+// Папка: добавить или переименовать (документы переезжают вместе с ней); пустую можно удалить.
+function editFolder(old){
+  old = old || '';
+  var empty = old && !S.kbAll.some(function(d){ return d.section===old; });
+  openModal('<h2><span>'+(old?'Папка':'Новая папка')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Название<input id="kf_name" value="'+esc(old)+'" placeholder="Например: Шаблоны документов"></label>'+
+    '<div class="acts">'+(old&&empty?'<button class="btn bad" onclick="delFolder(\''+esc(old).replace(/'/g,'&#39;')+'\')">Удалить</button>':'')+'<button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="saveFolder(\''+esc(old).replace(/'/g,'&#39;')+'\')">Сохранить</button></div>'+
+    (old&&!empty?'<div class="note">Удалить можно только пустую папку — сначала перенесите документы.</div>':''));
+}
+function saveFolder(old){
+  var name = $('kf_name').value.trim(); if (!name){ toast('Укажите название', true); return; }
+  var f = S.kb.folders;
+  if (f.indexOf(name)>=0 && name!==old){ toast('Такая папка уже есть', true); return; }
+  if (old){ var i = f.indexOf(old); if (i>=0) f[i] = name; else f.push(name); S.kbAll.forEach(function(d){ if (d.section===old) d.section = name; }); }
+  else f.push(name);
+  S.kbf = name; closeModal(); render(); toast(old?'Папка переименована':'Папка добавлена');
+  api('saveKbFolder', {name:name, old:old}).then(function(r){ if (r && r.length){ S.kb.folders = r; render(); } }).catch(function(){ S.kbAll = null; render(); });
+}
+function delFolder(name){
+  S.kb.folders = S.kb.folders.filter(function(x){ return x!==name; }); S.kbf = ''; closeModal(); render(); toast('Папка удалена');
+  api('deleteKbFolder', name).catch(function(){ S.kbAll = null; render(); });
+}
+function moveKb(id, folder){
+  var d = S.kbAll.filter(function(x){ return x.id===id; })[0]; if (!d || d.lesson) return;
+  d.section = folder; d.updated = S.today; closeModal(); S.kbf = folder; render(); toast('Перенесено в «'+folder+'»');
+  bg('saveKb', {id:d.id, section:d.section, title:d.title, text:d.text, link:d.link});
 }
 function openKb(i){
   var d = S.kbl[i];
   openModal('<h2><span>'+esc(d.title)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
     '<div class="tags" style="margin:0 0 12px"><span class="tag gray">'+esc(d.section)+'</span>'+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div>'+
-    (d.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(d.link)+'" target="_blank" rel="noopener">Открыть файл</a>':'')+
-    '<div class="kb-text">'+hl(d.text)+'</div>'+
-    (S.me.boss&&!d.lesson?'<div class="acts"><button class="btn bad" onclick="delKb(\''+d.id+'\')">Удалить</button><button class="btn sec" onclick="editKb('+i+')">Изменить</button></div>':''));
+    (d.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(d.link)+'" target="_blank" rel="noopener">📎 Открыть файл</a>':'')+
+    (d.text?'<div class="kb-text">'+hl(d.text)+'</div>':'<div class="note">Текст не распознан — откройте файл.</div>')+
+    (S.me.boss&&!d.lesson?'<label class="f" style="margin-top:12px">Папка<select onchange="moveKb(\''+d.id+'\', this.value)">'+kbFolders().map(function(f){ return '<option'+(f===d.section?' selected':'')+'>'+esc(f)+'</option>'; }).join('')+'</select></label>'+
+      '<div class="acts"><button class="btn bad" onclick="delKb(\''+d.id+'\')">Удалить</button><button class="btn sec" onclick="editKb('+i+')">Изменить</button></div>':''));
 }
 function editKb(i){
-  var d = i===undefined ? {id:'', section:'', title:'', text:'', link:''} : S.kbl[i];
-  var secs = []; (S.kbAll||[]).forEach(function(x){ if (secs.indexOf(x.section)<0) secs.push(x.section); });
+  var d = i===undefined ? {id:'', section:S.kbf||'', title:'', text:'', link:''} : S.kbl[i];
   openModal('<h2><span>'+(d.id?'Изменить документ':'Новый документ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
-    '<label class="f">Раздел<input id="k_sec" list="k_secs" placeholder="Например: Продажи, Отгрузка, Возвраты" value="'+esc(d.section)+'"></label><datalist id="k_secs">'+secs.map(function(s){ return '<option value="'+esc(s)+'">'; }).join('')+'</datalist>'+
+    '<label class="f">Папка<select id="k_sec">'+kbFolders().map(function(f){ return '<option'+(f===d.section?' selected':'')+'>'+esc(f)+'</option>'; }).join('')+'</select></label>'+
     '<label class="f">Название<input id="k_title" value="'+esc(d.title)+'"></label>'+
-    '<label class="f">Ссылка на файл (Google Документ, PDF на Диске) — необязательно<input id="k_link" value="'+esc(d.link)+'" placeholder="https://"></label>'+
+    '<label class="f">Ссылка на файл — необязательно<input id="k_link" value="'+esc(d.link)+'" placeholder="https://"></label>'+
+    (S.kb&&S.kb.drive?'<div class="note">Файл сначала загрузите в <a href="'+esc(S.kb.drive)+'" target="_blank" rel="noopener">папку на Диске</a>, затем вставьте сюда ссылку на него (правая кнопка → «Поделиться» → «Копировать ссылку»).</div>':'')+
     '<label class="f">Текст регламента<textarea id="k_text" style="min-height:220px">'+esc(d.text)+'</textarea></label>'+
     '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="saveKb(\''+(d.id||'')+'\')">Сохранить</button></div>');
 }
 function saveKb(id){
-  var d = {id:id || Math.random().toString(16).slice(2,10), section:$('k_sec').value.trim()||'Общее', title:$('k_title').value.trim(), link:$('k_link').value.trim(), text:$('k_text').value};
+  var d = {id:id || Math.random().toString(16).slice(2,10), section:$('k_sec').value.trim()||kbFolders()[0]||'Общее', title:$('k_title').value.trim(), link:$('k_link').value.trim(), text:$('k_text').value};
   if (!d.title){ toast('Укажите название', true); return; }
   var kb = S.kbAll = S.kbAll||[], ex = kb.filter(function(x){ return x.id===d.id; })[0];
   if (ex) Object.assign(ex, d, {updated:S.today}); else kb.push(Object.assign({updated:S.today}, d));
-  closeModal(); render(); toast('Документ сохранён');
+  S.kbf = d.section; closeModal(); render(); toast('Документ сохранён');
   bg('saveKb', d);
 }
 function delKb(id){
