@@ -175,7 +175,9 @@ var GAS = !!(window.google && google.script && google.script.run); // откры
 if (!URLKEY && !GAS) { try { URLKEY = (new URLSearchParams(location.search).get('k') || '').replace(/[^\w-]/g, ''); } catch(e){} }
 var S = { token: '', me: null, team: [], price: [], rate: 105, today: '', month: '', mgr: '', tab: 'orders', data: null, cache: {} };
 var MON = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-var STATUSES = ['Создан','Собран','Доставлен'];
+var STATUSES = ['Новый','Создан','Собран','Оплачен','Доставлен'];
+function stCls(st){ return st==='Доставлен'||st==='Оплачен'?'ok':st==='Собран'?'vio':st==='Новый'?'warn':'gray'; }
+function wh(){ return S.me.role==='Кладовщик' || S.me.role==='Курьер'; }
 var PM = [['calls','Звонки с новыми лидами'],['warm','Встречи с тёплыми клиентами'],['cold','Встречи с холодными клиентами'],['deals','Заключённые договоры'],['sum','Сумма заказов']];
 
 function $(id){ return document.getElementById(id); }
@@ -449,12 +451,12 @@ function drawOrders(){
       ' <button class="btn sec sm" onclick="S.unpaidAll=!S.unpaidAll;render();refreshList()">'+(S.unpaidAll?'Только этот месяц':'За всё время')+'</button></div>':
      Q?'<div class="note">Найдено по всем месяцам</div>':S.range?'<div class="note">За период '+esc(rangeLabel())+'</div>':'');
   $('olist').innerHTML = list.length ? list.map(function(o,i){
-    var st = o.status==='Доставлен'?'ok':o.status==='Собран'?'vio':'gray';
+    var st = stCls(o.status);
     return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
       '<div class="s">'+dmy(o.date)+(S.me.boss&&!mgr?' · '+esc(o.mgr):'')+(o.dlv?' · доставка '+money(o.dlv):'')+' · '+esc(o.order)+'</div><div class="tags">'+
       (o.saving?'<span class="tag">записывается…</span>':'')+
       '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+esc(o.status||'Создан')+' ▾</button>'+
-      (S.me.edit?'<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>':(o.paid?'<span class="tag ok">Оплачен</span>':''))+
+      (S.me.edit||S.me.acc?'<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>':(o.paid?'<span class="tag ok">Оплачен</span>':''))+
       (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
       (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
   }).join('') : '<div class="empty">Заказов нет</div>';
@@ -485,7 +487,7 @@ function routeButton(addr){
 
 // Карточка заказа для склада и курьера: адрес, маршрут, звонок, состав и кнопки статуса.
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
-function OFILTERS(){ var w = !S.me.edit; return [['','Все'],['unpaid','Не оплачены'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
+function OFILTERS(){ var w = wh(); return [['','Все'],['unpaid','Не оплачены'],['Новый',w?'Новые':'Новый'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Оплачен','Оплачен'],['Доставлен',w?'Доставлены':'Доставлен']]; }
 function vOrdersChips(){ Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ b.classList.toggle('on', OFILTERS()[k][0]===S.of); }); }
 function viewOrder(i){
   var o = S.orders[i], first = (o.addr||'').split('\n')[0];
@@ -522,7 +524,7 @@ function afterSave(o, fn){
 function setState(i, status, paid){
   closeMenu();
   var o = S.orders[i];
-  if (status !== null) o.status = status;
+  if (status !== null){ o.status = status; if (status==='Оплачен') o.paid = true; }
   if (paid !== null) o.paid = paid;
   drawOrders();
   afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:o.status, paid:o.paid}); });
@@ -545,7 +547,7 @@ var F = null; // форма заказа
 function editOrder(i, preset){
   var o = i===undefined || i===null ? null : S.orders[i];
   S.today = localToday();
-  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'Создан', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.om || S.me.name };
+  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'Новый', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.om || S.me.name };
   if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = preset.disc; F.trade = preset.trade; }
   F.lines=[];
   if (o) F.orig = {mgr:o.mgr, client:o.client, date:o.date};
@@ -1316,7 +1318,7 @@ function editEmp(i){
   openModal('<h2><span>'+(isNew?'Новый сотрудник':esc(e.fio||e.name))+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
     (isNew?'<label class="f">Имя (как в колонке «Менеджер» заказов)<input id="e_name"></label>':'')+
     '<label class="f">Фамилия<input id="e_sur" value="'+esc(e.surname||'')+'"></label>'+
-    '<label class="f">Роль<select id="e_role" onchange="$(\'e_helps_w\').classList.toggle(\'hidden\', this.value!==\'Ассистент\')">'+['Менеджер','Руководитель','Офис-менеджер','Кладовщик','Курьер','Стажёр','Ассистент'].map(function(r){ return '<option'+(e.role===r?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></label>'+
+    '<label class="f">Роль<select id="e_role" onchange="$(\'e_helps_w\').classList.toggle(\'hidden\', this.value!==\'Ассистент\')">'+['Менеджер','Руководитель','Офис-менеджер','Кладовщик','Курьер','Стажёр','Ассистент','Бухгалтер'].map(function(r){ return '<option'+(e.role===r?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></label>'+
     '<label class="f'+(e.role==='Ассистент'?'':' hidden')+'" id="e_helps_w">Помогает (заказы — от его имени, видит его задачи)<select id="e_helps">'+sales.map(function(x){ return '<option value="'+esc(x.name)+'"'+(x.name===e.helps?' selected':'')+'>'+esc(x.fio||x.name)+'</option>'; }).join('')+'</select></label>'+
     '<label class="f">Почта Google<input id="e_email" type="email" value="'+esc(e.email)+'"></label>'+
     '<label class="f">Телефон<input id="e_phone" inputmode="tel" value="'+esc(e.phone)+'"></label>'+
