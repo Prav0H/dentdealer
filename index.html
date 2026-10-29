@@ -143,6 +143,13 @@ body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:
 .kcard{background:var(--card);border-radius:12px;padding:10px 10px 8px;margin-bottom:8px;border-left:4px solid #cbd5e1;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .kcard.p-high{border-left-color:var(--bad)}.kcard.p-low{border-left-color:#9ec5a8}
 .kcard .kt{font-size:14px}
+.kcard.late{border-left-color:var(--bad);background:var(--bad-soft)}
+.kcard.late .kt{color:var(--bad)}
+.kmove.main button.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent;font-weight:600}
+.kmove.main button{color:var(--ink)}
+.ot td.ed{cursor:pointer}
+.ot td.ed:hover{background:var(--pri-soft)}
+.ot td .ce{width:100%;min-width:110px;font:inherit;padding:4px 6px;border:1px solid var(--pri);border-radius:6px;background:var(--card);color:var(--ink)}
 .kmove{display:flex;gap:6px;margin-top:8px}
 .kmove button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:5px;font-size:12px;cursor:pointer;color:var(--mute)}
 .mic{border:0;border-radius:50%;width:44px;height:44px;background:var(--pri-soft);color:var(--pri);font-size:20px;cursor:pointer;flex:none}
@@ -195,7 +202,7 @@ var S = { token: '', me: null, team: [], price: [], rate: 105, today: '', month:
 var MON = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 var STATUSES = ['Создан','Собран','Доставлен']; // новый заказ — без статуса; статус ставят бухгалтер и склад
 function stCls(st){ return st==='Доставлен'?'ok':st==='Собран'?'vio':st==='Создан'?'gray':'warn'; }
-function stLbl(st){ return st || 'Без статуса'; }
+function stLbl(st){ return st || ''; } // пустой статус показываем пустым полем
 function wh(){ return S.me.role==='Кладовщик' || S.me.role==='Курьер'; }
 function canSt(){ return !!S.me.st; } // может менять статус заказа
 function cashless(v){ return /безнал|б\/н|^бн$/i.test(String(v||'')); }
@@ -482,7 +489,7 @@ function drawOrders(){
   $('olist').innerHTML = list.length ? (S.lastTable ? orderTable(list) : list.map(orderCard).join('')) : '<div class="empty">Заказов нет</div>';
 }
 // Кнопка статуса (меню — только тем, кто может его менять) и отметка оплаты (безнал — всегда оплачен).
-function stBtn(o,i){ var st = stCls(o.status); return canSt() ? '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+esc(stLbl(o.status))+' ▾</button>' : '<span class="tag '+st+'">'+esc(stLbl(o.status))+'</span>'; }
+function stBtn(o,i){ var st = stCls(o.status); return canSt() ? '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+(o.status?esc(o.status)+' ':'')+'▾</button>' : o.status ? '<span class="tag '+st+'">'+esc(o.status)+'</span>' : ''; }
 function paidBtn(o,i){
   return S.me.edit ? '<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>' : (o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>');
 }
@@ -497,13 +504,56 @@ function orderCard(o,i){
 }
 // Таблица как в рабочем файле: статус, менеджер, клиент, адрес, заказ, скидка, сумма, торгующая, счёт, нал/безнал, даты, оплата.
 // СДЭК, комментарий и стоимость доставки — при открытии заказа.
+// Кто может править заказы — меняет ячейки прямо в таблице (клик по ячейке), клиент открывает заказ целиком.
 function orderTable(list){
-  var td = function(h, cls){ return '<td'+(cls?' class="'+cls+'"':'')+'>'+h+'</td>'; };
+  var ed = S.me.edit;
+  var td = function(h, cls, i, f){ return '<td'+(cls?' class="'+cls+(ed&&f?' ed':'')+'"':(ed&&f?' class="ed"':''))+(ed&&f?' onclick="cellEdit(event,'+i+',\''+f+'\')" title="Нажмите, чтобы изменить"':'')+'>'+h+'</td>'; };
   return '<div class="tw"><table class="ot"><thead><tr><th>Статус</th><th>Менеджер</th><th>Клиент</th><th>Адрес</th><th>Заказ</th><th class="num">Скидка</th><th class="num">Сумма</th><th>Торг.</th><th>Счёт</th><th>Нал/безнал</th><th>Дата</th><th>Отгрузка</th><th>Доставка</th><th>Оплачен</th></tr></thead><tbody>'+
     list.map(function(o,i){
-      return '<tr'+(o.saving?' class="saving"':'')+' onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')">'+td(stBtn(o,i))+td(esc(o.mgr))+td('<b>'+esc(o.client)+'</b>')+td('<div class="cl">'+esc(o.addr)+'</div>')+td('<div class="cl">'+esc(o.order)+'</div>')+
-        td(o.disc?pct(o.disc):'','num')+td(money(o.sum),'num')+td(o.trade?'да':'')+td(esc(o.inv))+td(esc(o.cash))+td(dmy(o.date),'num')+td(dmy(o.ship),'num')+td(dmy(o.deliv),'num')+td(paidBtn(o,i))+'</tr>';
-    }).join('')+'</tbody></table></div>';
+      return '<tr'+(o.saving?' class="saving"':'')+(ed?'':' onclick="viewOrder('+i+')"')+'>'+td(stBtn(o,i))+td(esc(o.mgr),'',i,'mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','',i,'addr')+td('<div class="cl">'+esc(o.order)+'</div>','',i,'order')+
+        td(o.disc?pct(o.disc):'','num',i,'disc')+td(money(o.sum),'num',i,'sum')+td(o.trade?'да':'','',i,'trade')+td(esc(o.inv),'',i,'inv')+td(esc(o.cash),'',i,'cash')+td(dmy(o.date),'num',i,'date')+td(dmy(o.ship),'num',i,'ship')+td(dmy(o.deliv),'num',i,'deliv')+td(paidBtn(o,i))+'</tr>';
+    }).join('')+'</tbody></table></div>'+(ed?'<div class="note">Нажмите на ячейку, чтобы изменить значение; Enter — сохранить, Esc — отменить. Клиент открывает заказ целиком.</div>':'');
+}
+var CELLS = {mgr:'select', addr:'area', order:'area', disc:'num', sum:'num', trade:'bool', inv:'text', cash:'cash', date:'date', ship:'date', deliv:'date'};
+function cellEdit(ev, i, f){
+  ev.stopPropagation();
+  var o = S.orders[i], td = ev.currentTarget, type = CELLS[f];
+  if (!S.me.edit || !o || o.saving || td.querySelector('input,select,textarea')) return;
+  if (type === 'bool'){ patchOrder(o, {trade: !o.trade}); return; }
+  var cur = f==='disc' ? (o.disc ? Math.round(o.disc*1000)/10 : '') : f==='sum' ? (o.sum || '') : (o[f] || ''), el;
+  if (type === 'select' || type === 'cash'){
+    el = document.createElement('select');
+    var opts = type === 'select' ? (S.sales.indexOf(o.mgr)>=0 ? S.sales : [o.mgr].concat(S.sales)) : ['', 'Нал', 'Безнал'].concat(cur && cur!=='Нал' && cur!=='Безнал' ? [cur] : []);
+    opts.forEach(function(v){ var op = document.createElement('option'); op.value = v; op.textContent = v || '—'; op.selected = v===cur; el.appendChild(op); });
+  } else if (type === 'area'){ el = document.createElement('textarea'); el.rows = 3; el.value = cur; }
+  else { el = document.createElement('input'); el.type = type === 'date' ? 'date' : 'text'; el.value = cur; if (type === 'num') el.inputMode = 'decimal'; }
+  el.className = 'ce';
+  var done = false;
+  var finish = function(save){
+    if (done) return; done = true;
+    var v = el.value; drawOrders();
+    if (!save) return;
+    var patch = {};
+    if (f === 'disc') patch.disc = num(v)/100; else if (f === 'sum') patch.sum = num(v); else patch[f] = v;
+    if (patch[f] === o[f]) return;
+    patchOrder(o, patch);
+  };
+  el.onblur = function(){ finish(true); };
+  el.onkeydown = function(e){ if (e.key === 'Escape') finish(false); else if (e.key === 'Enter' && el.tagName !== 'TEXTAREA'){ e.preventDefault(); finish(true); } };
+  if (el.tagName === 'SELECT') el.onchange = function(){ finish(true); };
+  el.onclick = function(e){ e.stopPropagation(); };
+  td.innerHTML = ''; td.appendChild(el); el.focus(); if (el.select && el.type !== 'date') el.select();
+}
+// Записать изменённые поля заказа: экран обновляется сразу, таблица — в фоне (как при сохранении формы).
+function patchOrder(o, patch){
+  var orig = {mgr:o.mgr, client:o.client, date:o.date};
+  Object.assign(o, patch); o.saving = true; drawOrders();
+  var p = { row:o.row, sheet:o.sheet, orig:orig, mgr:o.mgr, date:o.date, status:o.status, client:o.client, addr:o.addr, order:o.order,
+    disc:Math.round((o.disc||0)*10000)/100, sum:o.sum, dlv:o.dlv, trade:!!o.trade, inv:o.inv, cash:o.cash, paid:!!o.paid, ship:o.ship, deliv:o.deliv, cdek:o.cdek, comment:o.comment };
+  afterSave(o, function(){ return api('saveOrder', p); }).then(function(pos){
+    if (pos && pos.row){ o.row = pos.row; o.sheet = pos.sheet; }
+    o.saving = false; toast('Сохранено'); refresh();
+  }).catch(function(){ refresh(); });
 }
 
 // Телефоны из текста: «Руслан +7 925 530-32-37» → [{label, num}]
@@ -571,12 +621,12 @@ function delivered(k){
 
 // Карточка заказа для склада и курьера: адрес, маршрут, звонок, состав и кнопки статуса.
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
-function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Без статуса'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
+function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Пустые'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
 function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
 function viewOrder(i){
   var o = S.orders[i];
   openModal('<h2><span>'+esc(o.client)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
-    '<div class="tags" style="margin:0 0 10px"><span class="tag gray">'+dmy(o.date)+'</span><span class="tag '+stCls(o.status)+'">'+esc(stLbl(o.status))+'</span>'+
+    '<div class="tags" style="margin:0 0 10px"><span class="tag gray">'+dmy(o.date)+'</span>'+(o.status?'<span class="tag '+stCls(o.status)+'">'+esc(o.status)+'</span>':'')+
     (o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>')+(o.cash?'<span class="tag gray">'+esc(o.cash)+'</span>':'')+
     '<span class="tag gray">'+esc(o.mgr)+'</span>'+(o.inv?'<span class="tag gray">счёт '+esc(o.inv)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+'</div>'+
     '<div class="card" style="margin-top:0"><div class="note" style="margin:0 0 4px">Адрес и контакты</div><div style="white-space:pre-line">'+esc(o.addr||'—')+'</div>'+
@@ -596,7 +646,7 @@ function statusMenu(i, ev){
   ev.stopPropagation(); closeMenu();
   var o = S.orders[i], r = ev.target.getBoundingClientRect(), m = document.createElement('div');
   m.className = 'menu'; m.id = 'menu';
-  m.innerHTML = [''].concat(STATUSES).map(function(s){ return '<button class="'+(s===(o.status||'')?'on':'')+'" onclick="setState('+i+',\''+s+'\',null)">'+stLbl(s)+'</button>'; }).join('');
+  m.innerHTML = [''].concat(STATUSES).map(function(s){ return '<button class="'+(s===(o.status||'')?'on':'')+'" onclick="setState('+i+',\''+s+'\',null)">'+(s||'— пусто')+'</button>'; }).join('');
   document.body.appendChild(m);
   m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 8) + 'px';
   m.style.top = (r.bottom + m.offsetHeight + 8 > innerHeight ? r.top - m.offsetHeight - 4 : r.bottom + 4) + 'px';
@@ -643,7 +693,7 @@ function editOrder(i, preset){
   var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+mgrs.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
   openModal('<h2><span>'+(o?'Заказ':'Новый заказ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
     mgrSel+(S.me.assist?'<div class="note" style="margin-top:0">Заказ оформляется от имени: <b>'+esc(fio(S.me.om))+'</b></div>':'')+
-    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус'+(canSt()?'<select id="f_status"><option value="">Без статуса</option>'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'<input value="'+esc(stLbl(F.status))+'" disabled title="Статус ставят бухгалтер и склад">')+'</label></div>'+
+    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус'+(canSt()?'<select id="f_status"><option value="">—</option>'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'<input value="'+esc(stLbl(F.status))+'" disabled title="Статус ставят бухгалтер и склад">')+'</label></div>'+
     '<label class="f">Клиент<input id="f_client" autocomplete="off" placeholder="Начните вводить название" value="'+esc(F.client)+'"></label><div id="f_csug"></div>'+
     '<label class="f">Адрес доставки / контакты<textarea id="f_addr">'+esc(F.addr)+'</textarea></label>'+
     '<div class="tags" style="margin-top:6px"><button class="tag gray" onclick="$(\'f_addr\').value=\'Самовывоз\'">Самовывоз</button><button class="tag gray" onclick="addrFromCard()">Адрес из карточки клиента</button></div>'+
@@ -931,16 +981,56 @@ function vTasks(){
 }
 function kcard(t){
   var i = S.tasks.indexOf(t), late = t.due && t.due<S.today && t.status!=='Готово', si = TSTAT.indexOf(t.status||'Новая');
-  return '<div class="kcard '+prioCls(t.prio)+'" draggable="true" ondragstart="event.dataTransfer.setData(\'text\',\''+t.id+'\')">'+
+  return '<div class="kcard '+prioCls(t.prio)+(late?' late':'')+'" draggable="true" ondragstart="event.dataTransfer.setData(\'text\',\''+t.id+'\')">'+
     '<div class="kt" onclick="editTask('+i+')" style="cursor:pointer'+(t.status==='Готово'?';text-decoration:line-through;color:var(--mute)':'')+'">'+esc(t.text)+'</div><div class="tags">'+
     (t.prio==='Высокий'?'<span class="tag bad">срочно</span>':'')+
-    (t.due?'<span class="tag '+(late?'bad':t.due===S.today?'warn':'gray')+'">📅 '+dueLbl(t.due)+(t.time?' '+t.time:'')+'</span>':'')+
+    (t.due?'<span class="tag '+(late?'bad':t.due===S.today?'warn':'gray')+'">'+(late?'❗ просрочено ':'📅 ')+dueLbl(t.due)+(t.time?' '+t.time:'')+'</span>':'')+
     (t.client?'<span class="tag" style="cursor:pointer" onclick="event.stopPropagation();openClientName(this.dataset.n)" data-n="'+esc(t.client)+'">🏥 '+esc(t.client)+'</span>'+taskPhone(t):'')+
     (t.emp!==S.me.name ?'<span class="tag">👤 '+esc(t.emp)+'</span>':'')+
     (t.repeat?'<span class="tag vio">🔁 '+esc(t.repeat.toLowerCase())+'</span>':'')+
     (t.by && t.by!==t.emp?'<span class="tag gray">от '+esc(t.by)+'</span>':'')+'</div>'+
+    (t.status!=='Готово'?'<div class="kmove main"><button class="ok" onclick="moveTask(\''+t.id+'\',\'Готово\')">✅ Выполнено</button><button onclick="rescheduleTask(\''+t.id+'\')">⏰ Перенести</button></div>':'')+
     '<div class="kmove">'+(si>0?'<button onclick="moveTask(\''+t.id+'\',\''+TSTAT[si-1]+'\')">← '+TSTAT[si-1]+'</button>':'')+
     (si<2?'<button onclick="moveTask(\''+t.id+'\',\''+TSTAT[si+1]+'\')">'+TSTAT[si+1]+' →</button>':'')+'</div></div>';
+}
+// Перенос задачи: «завтра 10:00», «послезавтра», «пн 9:00», «05.11 14:30», «через 3 дня».
+var WD = ['вс','пн','вт','ср','чт','пт','сб'], WDF = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+function parseWhen(text){
+  var low = String(text||'').toLowerCase().trim(), d = new Date(S.today+'T00:00:00'), add = null, m;
+  if (/послезавтра/.test(low)) add = 2; else if (/завтра/.test(low)) add = 1; else if (/сегодня/.test(low)) add = 0;
+  else if ((m = low.match(/через\s+(\d+)\s*(дн|день|дня|нед)/))) add = +m[1] * (/нед/.test(m[2]) ? 7 : 1);
+  else if (/через\s+неделю/.test(low)) add = 7;
+  else if ((m = low.match(/(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?/))){ var y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : d.getFullYear(); d = new Date(y, +m[2]-1, +m[1]); if (!m[3] && d < new Date(S.today+'T00:00:00')) d.setFullYear(d.getFullYear()+1); add = 0; }
+  else if ((m = low.match(/(\d{4})-(\d{2})-(\d{2})/))){ d = new Date(+m[1], +m[2]-1, +m[3]); add = 0; }
+  else { for (var i = 0; i < 7; i++){ if (new RegExp('(^|\\s)('+WD[i]+'|'+WDF[i].slice(0,4)+'[а-я]*)(?=[\\s,.]|$)').test(low)){ add = ((i - d.getDay()) + 7) % 7 || 7; break; } } }
+  var tm = low.match(/(\d{1,2}):(\d{2})/), time = tm ? String(+tm[1]).padStart(2,'0')+':'+tm[2] : '';
+  if (!tm){ var th = low.match(/(^|\s)(?:в|к|на)\s+(\d{1,2})(?=[\s,.]|$)/); if (th && +th[2] < 24) time = String(+th[2]).padStart(2,'0')+':00'; }
+  if (add === null && !time) return null;
+  if (add === null) add = time > hmNow() ? 0 : 1;
+  d.setDate(d.getDate()+add);
+  return { due: isoOf(d), time: time };
+}
+function rescheduleTask(id){
+  var t = S.data.tasks.filter(function(x){ return x.id===id; })[0]; if (!t) return;
+  var quick = [['сегодня','Сегодня'],['завтра','Завтра'],['послезавтра','Послезавтра'],['через неделю','Через неделю']];
+  openModal('<h2><span>Перенести задачу</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="note" style="margin-top:0">'+esc(t.text)+(t.due?' · сейчас '+dueLbl(t.due)+(t.time?' '+t.time:''):'')+'</div>'+
+    '<label class="f">На когда<input id="rs_when" placeholder="завтра 10:00, пн, 05.11 14:30, через 3 дня" autocomplete="off"></label>'+
+    '<div class="seg" style="flex-wrap:wrap">'+quick.map(function(q){ return '<button onclick="$(\'rs_when\').value=\''+q[0]+'\'+($(\'rs_time\').value?\' \'+$(\'rs_time\').value:\'\');rsPreview()">'+q[1]+'</button>'; }).join('')+'</div>'+
+    '<label class="f">Время (необязательно)<input type="time" id="rs_time" value="'+(t.time||'')+'" onchange="rsPreview()"></label>'+
+    '<div class="note" id="rs_prev"></div>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="doReschedule(\''+id+'\')">Перенести</button></div>');
+  $('rs_when').oninput = rsPreview; $('rs_when').onkeydown = function(e){ if (e.key==='Enter') doReschedule(id); };
+  setTimeout(function(){ $('rs_when').focus(); }, 50);
+}
+function rsParse(){ var w = parseWhen($('rs_when').value); if (!w) return null; if ($('rs_time').value) w.time = $('rs_time').value; return w; }
+function rsPreview(){ var w = rsParse(); $('rs_prev').textContent = w ? '→ '+dueLbl(w.due)+', '+dmy(w.due)+(w.time?' в '+w.time:'') : ($('rs_when').value ? 'Не понял дату — напишите, например: завтра 10:00' : ''); }
+function doReschedule(id){
+  var w = rsParse(); if (!w){ toast('Не понял дату — напишите, например: завтра 10:00', true); return; }
+  var t = S.data.tasks.filter(function(x){ return x.id===id; })[0]; if (!t) return;
+  t.due = w.due; t.time = w.time; if (t.status==='Готово'){ t.status='Новая'; t.done=''; }
+  closeModal(); render(); toast('Перенесено на '+dueLbl(w.due)+(w.time?' '+w.time:''));
+  bg('saveTask', {id:t.id, text:t.text, due:t.due, time:t.time, client:t.client, emp:t.emp, status:t.status, prio:t.prio, repeat:t.repeat});
 }
 // Срок словами: «сегодня», «завтра», иначе дд.мм.
 function dueLbl(d){
