@@ -380,6 +380,8 @@ function go(t){
   if (t!=='orders') document.body.classList.remove('wide');
   S.tab=t; store('dd_tab', t); markTab(); render();
 }
+// выбор сотрудника вверху нужен руководителю для итогов, задач и обучения; в заказах и клиентах он видит только своё
+function mgrSel(){ var s = $('mgr'); if (s) s.classList.toggle('hidden', !S.me || !S.me.boss || S.tab==='orders' || S.tab==='clients'); }
 function shiftMonth(d){
   var y=+S.month.slice(0,4), m=+S.month.slice(5,7)-1+d;
   y += Math.floor(m/12); m = (m%12+12)%12;
@@ -390,6 +392,7 @@ function render(){
   $('mon').textContent = MON[+S.month.slice(5,7)-1] + ' ' + S.month.slice(0,4);
   if (!S.data){ $('view').innerHTML = '<div class="empty">Загрузка…</div>'; return; }
   var y = window.scrollY;
+  mgrSel();
   ({orders:vOrders, clients:vClients, tasks:vTasks, stats:vStats, kb:vKb, team:vTeam, learn:vLearn})[S.tab]();
   attBar();
   if (S.tab !== S.lastTab){ window.scrollTo(0,0); S.lastTab = S.tab; } else window.scrollTo(0,y);
@@ -425,13 +428,15 @@ function endDay(){
 }
 // Сотрудник, чьи данные смотрим: руководитель — себя (или выбранного; «Все» — пусто), ассистент — того, кому помогает.
 function cur(){ if (S.me.boss) return S.mgr==='*' ? '' : (S.mgr || S.me.name); return S.me.all ? '' : (S.me.om || S.me.name); }
+// заказы и клиенты: руководитель видит только свои (как менеджер); все — только склад, курьер, бухгалтер, офис-менеджер
+function ocur(){ return S.me.all ? '' : (S.me.om || S.me.name); }
 function pick(n){ S.mgr=n; $('mgr').value=n; render(); }
 function fio(n){ return (S.fio && S.fio[n]) || n; }
 
 // ---------- заказы ----------
 var Q = '', QR = null, QKEY = '';
 // заказы за всё время нужны для поиска, «Не оплачены» и периода — их берём с сервера
-function remoteKey(){ var all = S.of==='unpaid' && S.unpaidAll; return Q || all || S.range ? [cur(), Q, S.of==='unpaid', S.range&&S.range.from, S.range&&S.range.to].join('|') : ''; }
+function remoteKey(){ var all = S.of==='unpaid' && S.unpaidAll; return Q || all || S.range ? [ocur(), Q, S.of==='unpaid', S.range&&S.range.from, S.range&&S.range.to].join('|') : ''; }
 function vOrders(){
   var v=$('view'), keepFocus = document.activeElement && document.activeElement.id==='q';
   if (S.of === undefined) S.of = S.me.role==='Кладовщик' ? 'Создан' : S.me.role==='Курьер' ? 'Собран' : '';
@@ -449,7 +454,7 @@ function refreshList(){
   if (k === QKEY && QR){ drawOrders(); return; }
   QKEY = k; QR = null;
   if ($('olist')) $('olist').innerHTML = '<div class="empty">Загружаю…</div>';
-  api('getOrders', {mgr: cur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
+  api('getOrders', {mgr: ocur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
 }
 function rangeLabel(){ var r=S.range; return (r.from?dmy(r.from).slice(0,5):'…')+'–'+(r.to?dmy(r.to).slice(0,5):'…'); }
 function isoOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -465,14 +470,14 @@ function pickRange(){
 }
 function setRange(f, t){ S.range = (f||t) ? {from:f, to:t} : null; closeModal(); render(); refreshList(); }
 function ordersNow(){
-  var mgr = cur();
+  var mgr = ocur();
   var list = remoteKey() ? (QR||[]) : S.data.orders;
   return mgr ? list.filter(function(o){ return o.mgr===mgr; }) : list;
 }
 function drawOrders(){
   if (!$('olist')) return;
   if (remoteKey() && !QR){ if (QKEY !== remoteKey()) refreshList(); return; }
-  var list = ordersNow(), mgr = cur();
+  var list = ordersNow(), mgr = ocur();
   var isPaid = function(o){ return !!o.paid; }; // отметка «Оплачен» ставится вручную для любого заказа
   if (S.of === 'unpaid') list = list.filter(function(o){ return !isPaid(o); });
   else if (S.of) list = list.filter(function(o){ return S.of==='none' ? !o.status : o.status===S.of; });
@@ -494,7 +499,7 @@ function paidBtn(o,i){
   return S.me.edit ? '<button class="tag '+(o.paid?'ok':'warn')+'" onclick="togglePaid('+i+',event)">'+(o.paid?'✓ Оплачен':'Не оплачен')+'</button>' : (o.paid?'<span class="tag ok">Оплачен</span>':'<span class="tag warn">Не оплачен</span>');
 }
 function orderCard(o,i){
-  var mgr = cur();
+  var mgr = ocur();
   return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
     '<div class="s">'+dmy(o.date)+(S.me.all&&!mgr?' · '+esc(o.mgr):'')+' · '+esc(o.order)+'</div>'+(wh()&&o.addr?'<div class="s">📍 '+esc(addrLine(o.addr)||o.addr)+'</div>':'')+'<div class="tags">'+
     (wh()&&o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
@@ -508,10 +513,10 @@ function orderCard(o,i){
 function orderTable(list){
   var ed = S.me.edit;
   var td = function(h, cls, i, f){ return '<td'+(cls?' class="'+cls+(ed&&f?' ed':'')+'"':(ed&&f?' class="ed"':''))+(ed&&f?' onclick="cellEdit(event,'+i+',\''+f+'\')" title="Нажмите, чтобы изменить"':'')+'>'+h+'</td>'; };
-  return '<div class="tw"><table class="ot"><thead><tr><th>Статус</th><th>Менеджер</th><th>Клиент</th><th>Адрес</th><th>Заказ</th><th class="num">Скидка</th><th class="num">Сумма</th><th>Торг.</th><th>Счёт</th><th>Нал/безнал</th><th>Дата</th><th>Отгрузка</th><th>Доставка</th><th>Оплачен</th></tr></thead><tbody>'+
+  return '<div class="tw"><table class="ot"><thead><tr><th>Статус</th><th>Дата</th><th>Менеджер</th><th>Клиент</th><th>Адрес</th><th>Заказ</th><th class="num">Скидка</th><th class="num">Сумма</th><th>Торг.</th><th>Счёт</th><th>Нал/безнал</th><th>Отгрузка</th><th>Доставка</th><th>Оплачен</th></tr></thead><tbody>'+
     list.map(function(o,i){
-      return '<tr'+(o.saving?' class="saving"':'')+(ed?'':' onclick="viewOrder('+i+')"')+'>'+td(stBtn(o,i))+td(esc(o.mgr),'',i,'mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','',i,'addr')+td('<div class="cl">'+esc(o.order)+'</div>','',i,'order')+
-        td(o.disc?pct(o.disc):'','num',i,'disc')+td(money(o.sum),'num',i,'sum')+td(o.trade?'да':'','',i,'trade')+td(esc(o.inv),'',i,'inv')+td(esc(o.cash),'',i,'cash')+td(dmy(o.date),'num',i,'date')+td(dmy(o.ship),'num',i,'ship')+td(dmy(o.deliv),'num',i,'deliv')+td(paidBtn(o,i))+'</tr>';
+      return '<tr'+(o.saving?' class="saving"':'')+(ed?'':' onclick="viewOrder('+i+')"')+'>'+td(stBtn(o,i))+td(dmy(o.date),'num',i,'date')+td(esc(o.mgr),'',i,'mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','',i,'addr')+td('<div class="cl">'+esc(o.order)+'</div>','',i,'order')+
+        td(o.disc?pct(o.disc):'','num',i,'disc')+td(money(o.sum),'num',i,'sum')+td(o.trade?'да':'','',i,'trade')+td(esc(o.inv),'',i,'inv')+td(esc(o.cash),'',i,'cash')+td(dmy(o.ship),'num',i,'ship')+td(dmy(o.deliv),'num',i,'deliv')+td(paidBtn(o,i))+'</tr>';
     }).join('')+'</tbody></table></div>'+(ed?'<div class="note">Нажмите на ячейку, чтобы изменить значение; Enter — сохранить, Esc — отменить. Клиент открывает заказ целиком.</div>':'');
 }
 var CELLS = {mgr:'select', addr:'area', order:'area', disc:'num', sum:'num', trade:'bool', inv:'text', cash:'cash', date:'date', ship:'date', deliv:'date'};
@@ -534,7 +539,7 @@ function cellEdit(ev, i, f){
     var v = el.value; drawOrders();
     if (!save) return;
     var patch = {};
-    if (f === 'disc') patch.disc = num(v)/100; else if (f === 'sum') patch.sum = num(v); else patch[f] = v;
+    if (f === 'disc') patch.disc = num(v)/100; else if (f === 'sum') patch.sum = Math.ceil(num(v)); else patch[f] = v;
     if (patch[f] === o[f]) return;
     patchOrder(o, patch);
   };
@@ -685,7 +690,7 @@ var F = null; // форма заказа
 function editOrder(i, preset){
   var o = i===undefined || i===null ? null : S.orders[i];
   S.today = localToday();
-  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: cur() || S.me.om || S.me.name };
+  F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: ocur() || S.me.om || S.me.name };
   if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = preset.disc; F.trade = preset.trade; }
   F.lines=[]; F.extra = F.order;
   if (o){ F.orig = {mgr:o.mgr, client:o.client, date:o.date}; parseLines(); }
@@ -802,7 +807,7 @@ function recalc(keepLines){
     // товары из прайса считаются по ценам и скидке; то, что осталось в заказе текстом (без цены), — по прежней сумме
     var d = 1-num($('f_disc').value)/100;
     var rest = F.row ? Math.max(0, ((F.sum||0)-(F.dlv||0)) - (F.base0||0)*(1-(F.disc||0))) : 0;
-    $('f_sum').value = Math.round((linesTotal()*d + rest)*100)/100;
+    $('f_sum').value = Math.ceil(linesTotal()*d + rest); // суммы заказов — вверх до целого рубля
   }
   showTotal();
 }
@@ -814,7 +819,7 @@ function saveOrder(){
     row: F.row, sheet: F.sheet, orig: F.orig, mgr: $('f_mgr') ? $('f_mgr').value : (S.me.om || S.me.name),
     date: $('f_date').value, status: $('f_status') ? $('f_status').value : F.status, client: $('f_client').value.trim(), addr: $('f_addr').value,
     order: [extra, txt].filter(Boolean).join(extra && txt ? ', ' : ''),
-    disc: num($('f_disc').value), sum: Math.round((num($('f_sum').value) + num($('f_dlv').value))*100)/100, dlv: num($('f_dlv').value), trade: $('f_trade').checked,
+    disc: num($('f_disc').value), sum: Math.ceil(num($('f_sum').value) + num($('f_dlv').value)), dlv: num($('f_dlv').value), trade: $('f_trade').checked,
     inv: $('f_inv').value, cash: $('f_cash').value, paid: $('f_paid').checked,
     ship: $('f_ship').value, deliv: $('f_deliv').value, cdek: $('f_cdek').value, comment: $('f_comment').value
   };
@@ -872,7 +877,7 @@ function vSalary(){
   v.innerHTML = h;
 }
 
-function goUnpaid(n){ if (S.me.boss){ S.mgr = n; $('mgr').value = n; } S.of = 'unpaid'; S.unpaidAll = true; S.range = null; Q = ''; go('orders'); }
+function goUnpaid(n){ if (n && n !== S.me.name && !S.me.all){ toast('Заказы коллег видны только им самим', true); return; } S.of = 'unpaid'; S.unpaidAll = true; S.range = null; Q = ''; go('orders'); }
 
 // ---------- план и отчёт ----------
 function vPlan(){
@@ -1165,6 +1170,7 @@ function nextOrder(c){ var cy = cycle(c); return cy && c.last ? addDays(c.last, 
 // «Пора звонить»: следующий заказ уже должен был быть (у найденного ритма — с запасом в несколько дней).
 function dueCall(c){
   var cy = cycle(c); if (!cy || !c.last) return false;
+  if (addDays(c.last, 30) > S.today) return false; // заказывал меньше месяца назад — звонить рано
   return addDays(c.last, cy.d + (cy.auto ? Math.max(3, Math.round(cy.d*0.15)) : 0)) < S.today;
 }
 // «Скоро закажет»: до ожидаемого заказа 7 дней или меньше — хорошее время напомнить о себе.
@@ -1173,15 +1179,16 @@ function daysLate(c){ var n = nextOrder(c); return n ? Math.round((Date.parse(S.
 var CF = 'all', CS = 'last';
 function vClients(){
   var v = $('view'), keep = document.activeElement && document.activeElement.id==='cq';
-  var mine = S.me.boss ? cur() || null : (S.me.om || S.me.name), y = S.today.slice(0,4);
+  var mine = ocur() || null, y = S.today.slice(0,4);
   var base = (S.data.clients||[]).filter(function(c){
     if (CQ) return [c.name,c.addr,c.phone,c.legal,c.clinic,c.lpr,c.alias,c.region,c.email].join(' ').toLowerCase().indexOf(CQ.toLowerCase())>=0;
-    return !mine ? true : S.me.boss ? c.mgr===mine : (c.n>0 || c.mgr===mine);
+    return !mine ? true : (c.n>0 || c.mgr===mine);
   });
   if (CF==='none') CF = 'all';
-  var due = base.filter(dueCall), soon = base.filter(soonCall);
-  var list = (CF==='due' ? due : CF==='soon' ? soon : base).slice().sort(function(a,b){
-    if (CF==='due' || CF==='soon') return daysLate(b) - daysLate(a);
+  if (CF==='soon') CF = 'all';
+  var due = base.filter(dueCall);
+  var list = (CF==='due' ? due : base).slice().sort(function(a,b){
+    if (CF==='due') return daysLate(b) - daysLate(a);
     if (CS==='sum') return yearSum(b) - yearSum(a) || b.sum - a.sum;
     if (CS==='az') return a.name.localeCompare(b.name, 'ru');
     return (b.last||'') < (a.last||'') ? -1 : (b.last||'') > (a.last||'') ? 1 : b.n - a.n;
@@ -1189,15 +1196,15 @@ function vClients(){
   S.clist = list.slice(0, 200);
   var chip = function(k, t){ return '<button class="'+(CF===k?'on':'')+'" onclick="CF=\''+k+'\';render()">'+t+'</button>'; };
   v.innerHTML = '<div class="bar"><input id="cq" placeholder="Поиск: название, юр. название, ЛПР, телефон" value="'+esc(CQ)+'"><button class="btn" onclick="editClient()">+ Клиент</button></div>'+
-    '<div class="seg">'+chip('all','Все · '+base.length)+chip('due','🔔 Пора звонить · '+due.length)+chip('soon','⏳ Скоро закажут · '+soon.length)+'</div>'+
-    (CF==='due'||CF==='soon'?'<div class="note" style="margin:0 2px 8px">Считаем по интервалу закупок из карточки, а если его нет — по тому, как часто клиент заказывал раньше (📈).</div>':'')+
+    '<div class="seg">'+chip('all','Все · '+base.length)+chip('due','🔔 Пора звонить · '+due.length)+'</div>'+
+    (CF==='due'?'<div class="note" style="margin:0 2px 8px">Считаем по интервалу закупок из карточки, а если его нет — по тому, как часто клиент заказывал раньше (📈). Если последний заказ был меньше месяца назад, клиент сюда не попадает.</div>':'')+
     '<div class="bar" style="margin:0 2px 8px"><span class="note" style="margin:0;flex:1">'+(CQ?'Найдено: '+list.length:(mine?'Ваши клиенты: ':'Клиентов: ')+list.length)+'</span>'+
     '<select style="width:auto" onchange="CS=this.value;render()">'+[['last','Недавние заказы'],['sum','Сумма за '+y],['az','По алфавиту']].map(function(o){ return '<option value="'+o[0]+'"'+(CS===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
     '<div class="list">'+S.clist.map(function(c,i){
       var ys = yearSum(c);
       return '<div class="item" onclick="openClient('+i+')"><div class="t"><b>'+esc(c.name)+'</b>'+(ys?'<span>'+money(ys)+'</span>':'')+'</div>'+
         '<div class="s">'+esc(c.legal && c.legal!==c.name ? c.legal : (c.addr||'').split('\n')[0])+'</div><div class="tags">'+
-        (dueCall(c)?'<span class="tag warn">🔔 пора звонить'+(daysLate(c)>0?' · ждали '+dmy(nextOrder(c)).slice(0,5):'')+'</span>':soonCall(c)?'<span class="tag">⏳ закажет ~'+dmy(nextOrder(c)).slice(0,5)+'</span>':'')+
+        (dueCall(c)?'<span class="tag warn">🔔 пора звонить'+(daysLate(c)>0?' · ждали '+dmy(nextOrder(c)).slice(0,5):'')+'</span>':'')+
         (c.n?'<span class="tag gray">заказов '+c.n+'</span>':'')+(c.last?'<span class="tag gray">последний '+dmy(c.last)+'</span>':'<span class="tag gray">заказов не было</span>')+
         (c.every?'<span class="tag gray">берёт раз в '+esc(c.every)+'</span>':c.iv?'<span class="tag gray">📈 обычно раз в '+c.iv+' дн.</span>':'')+
         (c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'')+(c.trade?'<span class="tag vio">торгующая</span>':'')+
@@ -1239,7 +1246,7 @@ function rhythmText(c){
   var cy = cycle(c), n = nextOrder(c), h = '';
   if (c.iv) h += '📈 обычно раз в '+c.iv+' дн. (по '+(c.ivn+1)+' заказам)';
   if (c.iv && c.every && Math.abs(ivDays(c.every)-c.iv) > Math.max(7, c.iv*0.3)) h += '<br><small>по заказам чаще/реже, чем в карточке — можно поправить «Интервал закупок»</small>';
-  if (n) h += (h?'<br>':'')+(dueCall(c)?'<span class="tag warn">🔔 пора звонить</span> следующий заказ ждали '+dmy(n):soonCall(c)?'<span class="tag">⏳ скоро</span> следующий заказ ожидается ~'+dmy(n):'следующий заказ ожидается ~'+dmy(n));
+  if (n) h += (h?'<br>':'')+(dueCall(c)?'<span class="tag warn">🔔 пора звонить</span> следующий заказ ждали '+dmy(n):'следующий заказ ожидается ~'+dmy(n));
   return h || (cy ? '' : '');
 }
 // Суммы заказов по месяцам текущего года.
