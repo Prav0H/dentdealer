@@ -13,6 +13,14 @@
 <link rel="icon" href="icon-192.png">
 <script>var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});</script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script>
+// Быстрое хранилище (Firebase): открытые настройки проекта — это адрес, а не пароль.
+var FBCFG = { apiKey: "AIzaSyA2yacRRrlJOg7Sc-IDIMfArcOwqDPihpE", authDomain: "dentdealer-26b90.firebaseapp.com", projectId: "dentdealer-26b90" };
+if (typeof API_URL === 'undefined') var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
+</script>
 <style>
 :root{
   --bg:#f4f6fa;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;
@@ -227,12 +235,97 @@ function toast(msg, err){ var t=document.createElement('div'); t.className='toas
 
 // Вызов функции сервера: из Google — google.script.run, со страницы GitHub — запрос POST {fn, args}.
 function run(fn, args){
-  if (GAS) return new Promise(function(res, rej){ var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });
   return fetch(API_URL, {method:'POST', body: JSON.stringify({fn:fn, args:args})})
     .catch(function(){ throw new Error('Нет связи с сервером'); })
     .then(function(r){ return r.json(); })
-    .then(function(j){ if (j.err) throw new Error(j.err); return j.res; });
+    .then(function(j){ if (j.err) throw new Error(j.err); if (j.ver && j.ver > (S.ver||0)) S.ver = j.ver; return j.res; });
 }
+
+// ---------- быстрое хранилище (Firebase) ----------
+// Готовые данные экрана лежат в Firestore и приходят сразу (и обновляются сами); запись по-прежнему идёт на сервер Google.
+var FBA = null, FBD = null, FBUNSUB = [], FBORD = false;
+function fbInit(){
+  if (FBA !== null) return !!FBA;
+  try {
+    if (!window.firebase || typeof FBCFG === 'undefined'){ FBA = false; return false; }
+    if (!firebase.apps.length) firebase.initializeApp(FBCFG);
+    FBA = firebase.auth(); FBD = firebase.firestore();
+    try { FBD.enablePersistence({synchronizeTabs:true}).catch(function(){}); } catch(e){}
+    return true;
+  } catch(e){ console.warn('firebase', e); FBA = false; return false; }
+}
+function fbCreds(){ try { return JSON.parse(store('dd_fb')||'null'); } catch(e){ return null; } }
+// вход в быстрое хранилище: служебная почта по ID сотрудника, пароль из кода входа
+function fbLogin(id, code){
+  if (!id || !fbInit()) return Promise.resolve(false);
+  var email = 'e'+id+'@dentdealer.app', pass = 'dd-'+code+'-'+id;
+  return FBA.signInWithEmailAndPassword(email, pass).then(function(){ store('dd_fb', JSON.stringify({id:id, email:email, pass:pass})); return true; })
+    .catch(function(e){ console.warn('fb login', e && e.code); return false; });
+}
+function fbStop(){ FBUNSUB.forEach(function(u){ try{ u(); }catch(e){} }); FBUNSUB = []; FBORD = false; }
+// подписка на свои данные: экран обновляется сам, когда зеркало пересобрано
+function fbWatch(){
+  var cr = fbCreds(); if (!cr || !fbInit() || !FBA.currentUser) return false;
+  fbStop();
+  FBUNSUB.push(FBD.doc('bundles/'+cr.id).onSnapshot(function(snap){
+    if (!snap.exists) return;
+    var d = snap.data(), ver = +d.ver || 0;
+    if (ver < (S.ver||0)) return; // зеркало ещё не знает о нашей последней записи — ждём следующее
+    try { fbApply(JSON.parse(d.j)); } catch(e){ console.warn(e); }
+  }, function(e){ console.warn('fb bundle', e && e.code); }));
+  FBUNSUB.push(FBD.doc('shared/price').onSnapshot(function(snap){
+    if (!snap.exists) return;
+    try { var p = JSON.parse(snap.data().j); if (p.ver !== priceVer() || !S.price.length){ S.price = p.items; store('dd_price', JSON.stringify(p)); } } catch(e){}
+  }, function(){}));
+  FBUNSUB.push(FBD.doc('shared/kb').onSnapshot(function(snap){
+    if (!snap.exists) return;
+    try { var k = JSON.parse(snap.data().j); S.kb = k; S.kbAll = k.docs; if (S.tab==='kb') render(); } catch(e){}
+  }, function(){}));
+  S.fbLive = true;
+  return true;
+}
+// все заказы (для поиска, «не оплачены за всё время», периода и истории клиента) — тоже из зеркала
+function fbWatchOrders(){
+  if (FBORD || !S.me || !S.fbLive) return; FBORD = true;
+  var onList = function(list){ S.allOrders = list; if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } };
+  if (S.me.all) FBUNSUB.push(FBD.collection('orders_all').onSnapshot(function(qs){ var all = []; qs.forEach(function(d){ try { all = all.concat(JSON.parse(d.data().j)); } catch(e){} }); onList(all); }, function(e){ console.warn('fb orders', e && e.code); }));
+  else { var id = S.me.omId || (fbCreds()||{}).id; if (id) FBUNSUB.push(FBD.doc('orders_by/'+id).onSnapshot(function(snap){ if (snap.exists) try { onList(JSON.parse(snap.data().j)); } catch(e){} }, function(e){ console.warn('fb orders', e && e.code); })); }
+}
+function fbApply(b){
+  var d = b.data; delete b.data; delete b.price;
+  var first = !S.me;
+  try { store('dd_boot', JSON.stringify(b)); } catch(e){}
+  applyBoot(b);
+  S.fbGot = true;
+  if (d && d.month === S.month){
+    // наши заказы, которые ещё записываются, не затираем
+    var pend = (S.data && S.data.orders || []).filter(function(o){ return o.saving; });
+    norm(d);
+    pend.forEach(function(o){ if (!d.orders.some(function(x){ return (o._k && x._k===o._k) || (o.row && x.row===o.row && x.sheet===o.sheet); })) d.orders.unshift(o); });
+    var same = S.cache[d.month] && JSON.stringify(S.cache[d.month]) === JSON.stringify(d);
+    setData(d);
+    var a = document.activeElement, typing = a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.id !== 'q' && $('view').contains(a);
+    if (first || (!same && $('modal').classList.contains('hidden') && !typing)) render();
+  } else if (first) render();
+  fbWatchOrders();
+}
+// Заказы для поиска/периода/«за всё время»: из зеркала — сразу, иначе — с сервера
+function filterOrders(all){
+  var mgr = ocur(), q = Q.toLowerCase(), unpaid = S.of==='unpaid', r = S.range || {};
+  var list = all.filter(function(o){
+    if (mgr && o.mgr !== mgr) return false;
+    if (courier() && o.status!=='Собран' && o.status!=='Доставлен') return false;
+    if (unpaid && o.paid) return false;
+    if (r.from && (!o.date || o.date < r.from)) return false;
+    if (r.to && (!o.date || o.date > r.to)) return false;
+    if (q && [o.client,o.order,o.inv,o.addr,o.cdek].join(' ').toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  list.sort(function(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); });
+  return list.slice(0, 800);
+}
+function nkeyJs(s){ var k = ' '+String(s||'').toLowerCase().replace(/[«»"'“”„]/g,'').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ')+' '; for (var i=0;i<2;i++) k = k.replace(/ (ооо|ип|ао|зао|оао|пао|новый клиент|новые клиенты) /g,' '); return k.replace(/\s+/g,' ').trim(); }
+function clientKeys(c){ return [c.name, c.legal].concat(String(c.alias||'').split(/;|\n/)).map(nkeyJs).filter(Boolean); }
 function api(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
@@ -317,10 +410,14 @@ function showMyLink(){
 function doLogin(){
   var c = $('code').value.trim(); $('lerr').textContent='';
   if(!c) return;
-  api('login', c).then(function(tok){ S.token = tok; store('dd_tok', tok); start(); setTimeout(showMyLink, 1500); }).catch(function(e){ $('lerr').textContent = e.message; });
+  api('login', c).then(function(r){
+    var tok = typeof r === 'string' ? r : r.tok; S.token = tok; store('dd_tok', tok);
+    var p = r && r.id ? fbLogin(r.id, c) : Promise.resolve(false);
+    p.then(function(){ start(); setTimeout(showMyLink, 1500); });
+  }).catch(function(e){ $('lerr').textContent = e.message; });
 }
 $('code').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); S.token=''; S.cache={}; $('code').value=''; showLogin(); }
+function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); store('dd_fb', null); fbStop(); S.fbLive = false; S.fbGot = false; S.allOrders = null; if (FBA) try { FBA.signOut(); } catch(e){} S.token=''; S.cache={}; $('code').value=''; showLogin(); }
 
 function applyBoot(b){
   S.tg=b.tg||{bot:'', linked:false};
@@ -357,14 +454,24 @@ function start(){
   var saved = null;
   try { saved = JSON.parse(store('dd_boot') || 'null'); } catch(e){}
   if (saved){ applyBoot(saved); useMonthLocal(); }
-  api('boot', priceVer()).then(function(b){
-    var d = b.data; delete b.data;
-    var lite = Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite));
-    var first = !S.me;
-    applyBoot(b);
-    if (d.month === S.month) setData(d);
-    if (first || d.month === S.month) render(); else useMonth();
-  }).catch(function(){});
+  var slow = function(){
+    api('boot', priceVer()).then(function(b){
+      if (S.fbGot) return; // зеркало уже всё отдало
+      var d = b.data; delete b.data;
+      var lite = Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite));
+      var first = !S.me;
+      applyBoot(b);
+      if (d.month === S.month) setData(d);
+      if (first || d.month === S.month) render(); else useMonth();
+    }).catch(function(){});
+  };
+  var cr = fbCreds();
+  if (cr && fbInit()){
+    var timer = setTimeout(slow, 4000), done = false; // зеркало не ответило за 4 с — идём на сервер
+    var go = function(){ if (done) return; done = true; if (fbWatch()){ var chk = setInterval(function(){ if (S.fbGot){ clearTimeout(timer); clearInterval(chk); } }, 200); setTimeout(function(){ clearInterval(chk); }, 5000); } else slow(); };
+    if (FBA.currentUser) go();
+    else { var off = FBA.onAuthStateChanged(function(u){ off(); if (u) go(); else FBA.signInWithEmailAndPassword(cr.email, cr.pass).then(go, function(){ clearTimeout(timer); slow(); }); }); }
+  } else slow();
 }
 function priceVer(){ try { return JSON.parse(store('dd_price')||'{}').ver || ''; } catch(e){ return ''; } }
 // курс € для формы заказа: торгующей компании — свой
@@ -453,6 +560,7 @@ function refreshList(){
   if (!k){ QR=null; QKEY=''; drawOrders(); return; }
   if (k === QKEY && QR){ drawOrders(); return; }
   QKEY = k; QR = null;
+  if (S.allOrders){ QR = filterOrders(S.allOrders); drawOrders(); return; }
   if ($('olist')) $('olist').innerHTML = '<div class="empty">Загружаю…</div>';
   api('getOrders', {mgr: ocur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
 }
@@ -1224,13 +1332,15 @@ function openClient(i){
     (c.comment?'<div class="note" style="white-space:pre-line">'+esc(c.comment)+'</div>':'')+'</div>'+clientInfo(c)+clientMonths(c)+
     '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
     '<div id="c_note"></div><div class="sec-t">История</div><div id="c_hist"><div class="empty">Загрузка…</div></div>');
-  api('getClient', c.name).then(function(h){
+  var drawHist = function(h){
     if (CUR_CLIENT !== c || !$('c_hist')) return;
-    var ev = h.notes.map(function(n){ return {date:n.date, html:'<b>'+esc(n.type)+'</b> · '+esc(n.emp)+'<div style="white-space:pre-line">'+esc(n.text)+'</div>'}; })
+    var ev = (h.notes||[]).map(function(n){ return {date:n.date, html:'<b>'+esc(n.type)+'</b> · '+esc(n.emp)+'<div style="white-space:pre-line">'+esc(n.text)+'</div>'}; })
       .concat(h.orders.map(function(o){ return {date:o.date, html:'<b>Заказ '+money(o.sum)+'</b>'+(o.disc?' · скидка '+pct(o.disc):'')+' · '+esc(o.mgr)+' · '+esc(o.status||'')+(o.paid?' · оплачен':'')+'<div class="s">'+esc(o.order)+'</div>'}; }))
       .sort(function(a,b){ return a.date<b.date?1:-1; });
     $('c_hist').innerHTML = ev.length ? ev.map(function(e){ return '<div class="item" style="cursor:default"><div class="note" style="margin:0 0 4px">'+dmy(e.date)+'</div>'+e.html+'</div>'; }).join('') : '<div class="empty">Пока пусто</div>';
-  }).catch(function(){});
+  };
+  if (S.allOrders){ var ks = clientKeys(c); drawHist({orders: S.allOrders.filter(function(o){ return ks.indexOf(nkeyJs(o.client))>=0; }), notes: []}); }
+  api('getClient', c.name).then(drawHist).catch(function(){});
 }
 // Сведения о клиенте (юр. название, ЛПР, что покупает и т. д.) — только заполненные.
 function clientInfo(c){
@@ -1314,6 +1424,7 @@ function vKb(){
   var v = $('view'), keep = document.activeElement && document.activeElement.id==='kq';
   if (!S.kbAll){
     v.innerHTML = '<div class="empty">Загрузка регламентов…</div>';
+    if (S.fbLive) return;
     api('getKb').then(function(d){ if (Array.isArray(d)) d = {folders: [], docs: d}; S.kb = d; S.kbAll = d.docs; if (S.tab==='kb') render(); }).catch(function(){});
     return;
   }
