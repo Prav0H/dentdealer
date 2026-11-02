@@ -589,6 +589,7 @@ function drawOrders(){
   var isPaid = function(o){ return !!o.paid; }; // отметка «Оплачен» ставится вручную для любого заказа
   if (S.of === 'unpaid') list = list.filter(function(o){ return !isPaid(o); });
   else if (S.of) list = list.filter(function(o){ return S.of==='none' ? !o.status : o.status===S.of; });
+  if (S.me.acc) list = list.slice().reverse(); // бухгалтеру — от старых к новым, новые внизу
   S.orders = list;
   var sum=0, paid=0, bonus=0;
   list.forEach(function(o){ sum+=o.sum; if(isPaid(o)){ paid+=o.sum; if(o.bonus) bonus+=o.bonus.sum; } });
@@ -869,7 +870,7 @@ function lastAddr(name){
 }
 function showTotal(){ if ($('f_total')) $('f_total').textContent = money(num($('f_sum').value) + num($('f_dlv').value)); if ($('f_rate')) $('f_rate').textContent = rate(); }
 // Цена строки за единицу: товары с ценой в рублях — без курса €, остальные — по курсу.
-function unitPrice(p, unit){ return p.rub ? p.rub*(unit==='уп'?(p.perPack||1):1) : (unit==='уп'?p.eurPack:p.eur)*rate(); }
+function unitPrice(p, unit){ if (p.custom) return p.rub||0; return p.rub ? p.rub*(unit==='уп'?(p.perPack||1):1) : (unit==='уп'?p.eurPack:p.eur)*rate(); }
 var LAT = {'а':'a','в':'b','е':'e','к':'k','м':'m','н':'h','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x'};
 function simple(t){ return String(t||'').toLowerCase().replace(/ё/g,'е').replace(/[авекмнорстух]/g, function(ch){ return LAT[ch]; }).replace(/,/g,'.').replace(/×/g,'x'); }
 // Поиск по любому слову: артикул, название, группа, материал, аналог, размер, гранулы, цена. Все слова запроса должны найтись.
@@ -884,10 +885,18 @@ function suggest(){
   if (q.length<1){ $('f_sug').innerHTML=''; return; }
   var words = q.split(/\s+/).filter(Boolean);
   var res = S.price.filter(function(p){ if (!(p.eur || p.eurPack || p.rub)) return false; var h = priceHay(p); return words.every(function(w){ return h.indexOf(w)>=0; }); }).slice(0,15);
-  $('f_sug').innerHTML = res.length ? '<div class="sug">'+res.map(function(p){
+  var own = '<div onclick="addCustom()"><b>➕ Своя позиция: «'+esc($('f_find').value.trim())+'»</b><br><small>любое название, цену впишете сами</small></div>';
+  $('f_sug').innerHTML = '<div class="sug">'+res.map(function(p){
     return '<div onclick="addLine(\''+esc(p.art)+'\')"><b>'+esc(p.art)+'</b> — '+esc(p.name)+'<br><small>'+
       (p.rub && (p.perPack||1)===1 ? 'шт: '+money(p.rub) : 'уп '+p.perPack+' шт: '+money(unitPrice(p,'уп'))+' · шт: '+money(unitPrice(p,'шт')))+(p.group?' · '+esc(p.group):'')+'</small></div>';
-  }).join('')+'</div>' : '<div class="note">В прайсе не найдено. Попробуйте другое слово: часть названия, размер, гранулы или цену.</div>';
+  }).join('')+own+'</div>';
+}
+// Позиция не из прайса: название — что написали, цена за штуку — вписывается в строке.
+function addCustom(){
+  var t = $('f_find').value.trim(); if (!t) return;
+  F.lines.push({art:t, name:'своя позиция', custom:true, eur:0, eurPack:0, rub:0, perPack:1, unit:'шт', qty:1});
+  $('f_find').value=''; $('f_sug').innerHTML=''; drawLines();
+  var ins = document.querySelectorAll('#f_lines .cprice'); if (ins.length) ins[ins.length-1].focus();
 }
 function addLine(art){
   var p = S.price.filter(function(x){ return x.art===art; })[0];
@@ -896,8 +905,8 @@ function addLine(art){
 }
 function drawLines(){
   $('f_lines').innerHTML = F.lines.map(function(l,i){
-    var pr = unitPrice(l, l.unit), one = l.rub && (l.perPack||1)===1;
-    return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> '+money(pr*l.qty)+'<small>'+esc(l.name)+'</small></div>'+
+    var pr = unitPrice(l, l.unit), one = l.custom || (l.rub && (l.perPack||1)===1);
+    return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> '+money(pr*l.qty)+'<small>'+(l.custom?'цена за шт, ₽: <input class="cprice" inputmode="decimal" style="width:90px" value="'+(l.rub||'')+'" oninput="F.lines['+i+'].rub=num(this.value);recalc(true)">':esc(l.name))+'</small></div>'+
       '<input inputmode="numeric" value="'+l.qty+'" oninput="F.lines['+i+'].qty=+this.value||0;recalc(true)">'+
       (one?'<select disabled><option>шт</option></select>':'<select onchange="F.lines['+i+'].unit=this.value;drawLines()"><option'+(l.unit==='уп'?' selected':'')+'>уп</option><option'+(l.unit==='шт'?' selected':'')+'>шт</option></select>')+
       '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button></div>';
