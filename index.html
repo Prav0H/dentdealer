@@ -164,7 +164,8 @@ body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:
 .menu.fm{max-height:340px;overflow:auto;min-width:200px;max-width:320px;padding:6px}
 .fm label{display:flex;gap:8px;align-items:flex-start;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px}
 .fm label input[type=checkbox]{width:16px;height:16px;flex:none;margin:1px 0 0;padding:0}.fm label span{flex:1;text-align:left;white-space:normal}
-.menu.fm .fa button{display:inline-block;width:auto;flex:1}.fm label:hover{background:var(--pri-soft)}
+.menu.fm .fa button{display:inline-block;width:auto;flex:1}
+.fm .fr{display:flex;gap:6px;align-items:center;padding:4px 2px}.fm .fr input{width:90px;font:inherit;font-size:13px;padding:5px 6px;border:1px solid var(--line);border-radius:6px}.fm label:hover{background:var(--pri-soft)}
 .fm .fa{display:flex;gap:6px;padding:4px 2px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
 .fm .fs{width:100%;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px}
 .ot td.ed:hover{background:var(--pri-soft)}
@@ -636,6 +637,10 @@ var TF = {}, TS = null;
 var TCOLS = [['date','Дата','d'],['mgr','Менеджер'],['client','Клиент'],['addr','Адрес'],['order','Заказ'],['disc','Скидка'],['sum','Сумма'],['trade','Торг.'],
   ['inv','Счёт'],['cash','Нал/безнал'],['status','Статус'],['ship','Отгрузка','d'],['deliv','Доставка','d'],['paid','Оплачен']];
 var EMPTY = '— пусто';
+var TNOF = {addr:1, order:1, inv:1};   // у этих столбцов фильтра нет
+var TRANGE = {disc:1, sum:1};         // фильтр «от … до …»
+function tnum(o, k){ return k==='disc' ? Math.round((o.disc||0)*1000)/10 : (o.sum||0); }
+function tactive(v){ return v && (Array.isArray(v) ? v.length : (v.a!=null || v.b!=null)); }
 // Значение ячейки для фильтра (как его видно в таблице); пустая ячейка — «— пусто».
 function tcell(o, f){
   var v;
@@ -649,7 +654,29 @@ function tcell(o, f){
 }
 // Порядок значений в списке: даты и числа — по возрастанию, остальное — по алфавиту; «— пусто» — в конце.
 function tsortKey(o, f){ return f==='date'||f==='ship'||f==='deliv' ? (o[f]||'') : f==='sum' ? (o.sum||0) : f==='disc' ? (o.disc||0) : tcell(o, f).toLowerCase(); }
-function tpass(o, skip){ return Object.keys(TF).every(function(k){ var v = TF[k]; return k===skip || !v || !v.length || v.indexOf(tcell(o, k)) >= 0; }); }
+function tpass(o, skip){ return Object.keys(TF).every(function(k){
+  var v = TF[k];
+  if (k===skip || !tactive(v)) return true;
+  if (!Array.isArray(v)){ var n = tnum(o, k); return (v.a==null || n >= v.a) && (v.b==null || n <= v.b); }
+  return v.indexOf(tcell(o, k)) >= 0;
+}); }
+// Скидка и сумма: два числа «от» и «до» (можно одно).
+function trMenu(k, ev){
+  ev.stopPropagation(); closeMenu();
+  var v = TF[k] || {}, r = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div'), u = k==='disc' ? '%' : '₽';
+  m.className = 'menu fm'; m.id = 'menu';
+  m.innerHTML = '<div class="fr">от <input id="tr_a" inputmode="decimal" value="'+(v.a!=null?v.a:'')+'"> до <input id="tr_b" inputmode="decimal" value="'+(v.b!=null?v.b:'')+'"> '+u+'</div>'+
+    '<div class="fa"><button class="btn sm" onclick="trSet(\''+k+'\',true)">Показать</button><button class="btn sec sm" onclick="trSet(\''+k+'\',false)">Сбросить</button></div>';
+  document.body.appendChild(m);
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px';
+  m.style.top = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8) + 'px';
+  m.onkeydown = function(e){ if (e.key==='Enter') trSet(k, true); };
+  $('tr_a').focus();
+}
+function trSet(k, on){
+  var p = function(id){ var s = $(id).value.trim(); return s === '' ? null : num(s); };
+  TF[k] = on ? {a: p('tr_a'), b: p('tr_b')} : null; closeMenu(); drawOrders();
+}
 function tableFilter(list){
   list = list.filter(function(o){ return tpass(o); });
   if (TS){ var f = TS.f, d = TS.dir; list = list.slice().sort(function(a,b){ var x = a[f]||'', y = b[f]||''; if (!x !== !y) return x ? -1 : 1; return x < y ? -d : x > y ? d : 0; }); }
@@ -699,11 +726,13 @@ function orderCard(o,i){
 function orderTable(list){
   var ed = S.me.edit;
   var td = function(h, cls, i, f){ return '<td'+(cls?' class="'+cls+(ed&&f?' ed':'')+'"':(ed&&f?' class="ed"':''))+(ed&&f?' onclick="cellEdit(event,'+i+',\''+f+'\')" title="Нажмите, чтобы изменить"':'')+'>'+h+'</td>'; };
-  var any = Object.keys(TF).some(function(k){ return TF[k] && TF[k].length; }) || TS;
+  var any = Object.keys(TF).some(function(k){ return tactive(TF[k]); }) || TS;
   var head = TCOLS.map(function(c){
-    var k = c[0], v = TF[k] || [], num = k==='disc'||k==='sum', srt = c[2]==='d';
+    var k = c[0], v = TF[k] || [], num = k==='disc'||k==='sum', srt = c[2]==='d', u = k==='disc' ? '%' : '';
     var arrow = TS && TS.f===k ? (TS.dir===1 ? ' ▲' : ' ▼') : srt ? ' ⇅' : '';
-    var inp = '<button class="tf'+(v.length?' on':'')+'" id="tf_'+k+'" onclick="tfMenu(\''+k+'\',event)" title="'+esc(v.join(', '))+'">'+(v.length===1 ? esc(v[0]) : v.length ? 'выбрано: '+v.length : 'все')+' ▾</button>';
+    var inp = TNOF[k] ? '' : TRANGE[k]
+      ? '<button class="tf'+(tactive(v)?' on':'')+'" id="tf_'+k+'" onclick="trMenu(\''+k+'\',event)">'+(tactive(v) ? (v.a!=null?'от '+v.a+u+' ':'')+(v.b!=null?'до '+v.b+u:'') : 'все')+' ▾</button>'
+      : '<button class="tf'+(v.length?' on':'')+'" id="tf_'+k+'" onclick="tfMenu(\''+k+'\',event)" title="'+esc(v.join(', '))+'">'+(v.length===1 ? esc(v[0]) : v.length ? 'выбрано: '+v.length : 'все')+' ▾</button>';
     return '<th'+(num?' class="num"':'')+(srt?' class="srt" onclick="setTS(\''+k+'\')" title="Нажмите, чтобы отсортировать"':'')+'>'+c[1]+arrow+inp+'</th>';
   }).join('');
   return (any?'<div class="note" style="display:flex;gap:8px;align-items:center">Показаны заказы по фильтрам: '+list.length+' <button class="btn sec sm" onclick="clearTF()">Сбросить фильтры</button></div>':'')+
