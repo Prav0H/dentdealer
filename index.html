@@ -285,9 +285,10 @@ function fbInit(){
 function fbCreds(){ try { return JSON.parse(store('dd_fb')||'null'); } catch(e){ return null; } }
 // вход в быстрое хранилище: служебная почта по ID сотрудника, пароль из кода входа
 function fbLogin(id, code){
-  if (!id || !fbInit()) return Promise.resolve(false);
+  if (!id) return Promise.resolve(false);
   var email = 'e'+id+'@dentdealer.app', pass = 'dd-'+code+'-'+id;
   store('dd_fb', JSON.stringify({id:id, email:email, pass:pass})); // нужен и для базы Supabase
+  if (!fbInit()) return Promise.resolve(false);
   return FBA.signInWithEmailAndPassword(email, pass).then(function(){ return true; })
     .catch(function(e){ console.warn('fb login', e && e.code); return false; });
 }
@@ -331,12 +332,22 @@ function sbLive(){
 // Вход — той же служебной почтой и паролем, что и в Firebase; какие заказы видно — решает база (права по ролям).
 // Все свои заказы приходят одним запросом, дальше база сама присылает каждое изменение.
 var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {}, SBEV_AT = 0, SBTASK = null, SBSTAT = null, SBTGONE = {};
-function sbSignIn(){
-  var c = sbClient(), cr = fbCreds(); if (!c || !cr) return Promise.resolve(false);
+// данные входа в базу: если в телефоне их нет (вошли давно) или код сменили — берём у сервера по своему входу
+function sbCredsFresh(){
+  if (!S.token) return Promise.resolve(null);
+  return run('sbCreds', [S.token]).then(function(x){ if (x && x.email){ store('dd_fb', JSON.stringify(x)); return x; } return null; }).catch(function(){ return null; });
+}
+function sbSignIn(again){
+  var c = sbClient(), cr = fbCreds(); if (!c) return Promise.resolve(false);
+  if (!cr) return again ? Promise.resolve(false) : sbCredsFresh().then(function(x){ return x ? sbSignIn(true) : false; });
   return c.auth.getSession().then(function(r){
     var s = r && r.data && r.data.session;
     if (s && s.user && s.user.email === cr.email) return true;
-    return c.auth.signInWithPassword({email: cr.email, password: cr.pass}).then(function(x){ if (x.error) console.warn('sb login', x.error.message); return !x.error; });
+    return c.auth.signInWithPassword({email: cr.email, password: cr.pass}).then(function(x){
+      if (!x.error) return true;
+      console.warn('sb login', x.error.message);
+      return again ? false : sbCredsFresh().then(function(n){ return n ? sbSignIn(true) : false; });
+    });
   }).catch(function(){ return false; });
 }
 function sbOrdersStart(){
@@ -662,7 +673,7 @@ function doLogin(){
   if(!c) return;
   api('login', c).then(function(r){
     var tok = typeof r === 'string' ? r : r.tok; S.token = tok; store('dd_tok', tok);
-    var p = r && r.id ? fbLogin(r.id, c) : Promise.resolve(false);
+    var p = r && r.id ? fbLogin(r.id, c.replace(/\D/g, '')) : Promise.resolve(false); // сервер берёт из кода только цифры
     p.then(function(){ start(); setTimeout(showMyLink, 1500); });
   }).catch(function(e){ $('lerr').textContent = e.message; });
 }
