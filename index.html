@@ -330,7 +330,7 @@ function sbLive(){
 // ---------- заказы из базы Supabase ----------
 // Вход — той же служебной почтой и паролем, что и в Firebase; какие заказы видно — решает база (права по ролям).
 // Все свои заказы приходят одним запросом, дальше база сама присылает каждое изменение.
-var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {}, SBEV_AT = 0;
+var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {}, SBEV_AT = 0, SBTASK = null, SBSTAT = null, SBTGONE = {};
 function sbSignIn(){
   var c = sbClient(), cr = fbCreds(); if (!c || !cr) return Promise.resolve(false);
   return c.auth.getSession().then(function(r){
@@ -349,12 +349,22 @@ function sbOrdersStart(){
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBORD[p.old.id]; }
       else if (p.new && p.new.id) SBORD[p.new.id] = p.new.o;
       sbApplySoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'tasks'}, function(p){
+      if (!SBTASK) return;
+      SBEV_AT = Date.now();
+      if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBTASK[p.old.id]; }
+      else if (p.new && p.new.id) SBTASK[p.new.id] = p.new.o;
+      sbApplySoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'emp_stats'}, function(p){
+      if (!SBSTAT || p.eventType === 'DELETE' || !p.new || !p.new.emp) return;
+      SBSTAT[p.new.emp + '|' + p.new.month] = p.new;
+      sbApplySoon();
     }).subscribe(function(st){ if (st === 'SUBSCRIBED') sbLoadOrders(); }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
   });
 }
 function sbStop(){
   if (SBCH && SBCH !== 'wait') try { sbClient().removeChannel(SBCH); } catch(e){}
-  SBCH = null; SBORD = null; S.sbOn = false;
+  SBCH = null; SBORD = null; SBTASK = null; SBSTAT = null; S.sbOn = false;
   if (sbClient()) try { sbClient().auth.signOut(); } catch(e){}
 }
 function sbLoadOrders(){
@@ -366,7 +376,12 @@ function sbLoadOrders(){
       return (r.data || []).length === step ? page(from + step) : all;
     });
   };
-  return page(0).then(function(rows){ var m = {}; rows.forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; sbApply(); })
+  return Promise.all([page(0), c.from('tasks').select('id,o'), c.from('emp_stats').select('emp,month,ver,v')]).then(function(r){
+    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true;
+    if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
+    if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
+    sbApply();
+  })
     .catch(function(e){ console.warn('sb orders', e && e.message); });
 }
 function sbApplySoon(){ clearTimeout(SBAP_T); SBAP_T = setTimeout(sbApply, 150); }
@@ -395,12 +410,47 @@ function sbMerge(list, local, month){
   });
   return out;
 }
+// задачи из базы; свои правки последних 15 секунд и только что удалённые — как на экране
+function sbTasksMerge(local){
+  var now = Date.now(), keep = {};
+  Object.keys(SBTGONE).forEach(function(k){ if (now - SBTGONE[k] > 30000) delete SBTGONE[k]; });
+  (local || []).forEach(function(t){ if (t._t && now - t._t < 15000) keep[t.id] = t; });
+  var out = Object.keys(SBTASK).filter(function(id){ return !SBTGONE[id]; }).map(function(id){ return keep[id] || SBTASK[id]; });
+  Object.keys(keep).forEach(function(id){ if (!SBTASK[id] && !SBTGONE[id]) out.push(keep[id]); });
+  return out;
+}
+// ЗП, план, неоплаченные и заказы для бонуса из базы — если посчитаны не раньше того, что уже на экране
+function sbStatsInto(d){
+  if (!SBSTAT || !d || !d.salary) return;
+  var rep = {};
+  Object.keys(SBSTAT).forEach(function(k){
+    var r = SBSTAT[k];
+    if (!r.v || r.month !== d.month || !(r.emp in d.salary) || (+r.ver || 0) < (d._ver || 0)) return;
+    d.salary[r.emp] = r.v.salary; d.plan[r.emp] = r.v.plan; (d.unpaid = d.unpaid || {})[r.emp] = r.v.unpaid; rep[r.emp] = r.v.bonusOrders || [];
+  });
+  var names = Object.keys(rep); if (!names.length) return;
+  var bo = (d.bonusOrders || []).filter(function(o){ return !rep[o.mgr]; });
+  names.forEach(function(n){ bo = bo.concat(rep[n]); });
+  d.bonusOrders = bo.sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+  if (d.team) d.team = d.team.map(function(t){
+    var s = d.salary[t.name], p = d.plan[t.name]; if (!s || !p) return t;
+    var tot = (s.lines || []).filter(function(l){ return /итого/i.test(l.label); })[0];
+    return Object.assign({}, t, {plan: p.plan, fact: p.fact, hasPlan: p.hasPlan, salary: tot ? tot.value : null,
+      open: (d.tasks || []).filter(function(x){ return x.emp === t.name && x.status !== 'Готово'; }).length});
+  });
+}
 function sbApply(){
   if (!SBORD) return;
   S.allOrders = Object.keys(SBORD).map(function(k){ return SBORD[k]; }); S.allStale = false;
-  Object.keys(S.cache).forEach(function(m){ var d = S.cache[m]; if (d && d.orders) d.orders = sbMerge(sbMonth(m), d.orders, m); });
+  Object.keys(S.cache).forEach(function(m){
+    var d = S.cache[m]; if (!d) return;
+    if (d.orders) d.orders = sbMerge(sbMonth(m), d.orders, m);
+    if (SBTASK && d.tasks) d.tasks = sbTasksMerge(d.tasks);
+    sbStatsInto(d);
+  });
   if (S.data && S.data.month === S.month) try { store(key(), JSON.stringify(S.data)); } catch(e){}
   if (S.tab === 'orders'){ if (remoteKey()){ QKEY = ''; refreshList(); } else softRender(); }
+  else if (S.tab === 'tasks' || S.tab === 'stats' || S.tab === 'team') softRender();
 }
 // сигналов может прийти несколько подряд — обновляемся один раз (и не все телефоны в одну секунду)
 function remoteChange(){ if (!S.me || !S.token) return; clearTimeout(RCH_T); RCH_T = setTimeout(pullFresh, 300 + Math.random()*900); }
@@ -481,6 +531,9 @@ function norm(d){
 function setData(d){
   norm(d);
   if (SBORD && d.orders) d.orders = sbMerge(sbMonth(d.month), (S.cache[d.month] && S.cache[d.month].orders) || d.orders, d.month); // заказы — из базы
+  if (SBTASK && d.tasks) d.tasks = sbTasksMerge((S.cache[d.month] && S.cache[d.month].tasks) || d.tasks); // задачи — из базы
+  if (d._ver == null) d._ver = S.ver || 0; // с какой версией данных пришло (ЗП из базы старее — не подменяем)
+  sbStatsInto(d);
   S.cache[d.month] = d;
   if (d.month === S.month){ S.data = d; try { store(key(), JSON.stringify(d)); } catch(e){} }
 }
@@ -651,7 +704,7 @@ function attBar(){
 function setAtt(k, hm){ var a = Object.assign({}, S.data.att); if (a.d !== S.today){ a.d = S.today; a.me = ''; a.end = ''; } if (!a[k]) a[k] = hm; S.data.att = a; }
 // Закрыть свою задачу на экране сразу (сервер закроет её сам и поставит следующую).
 function doneLocal(text){
-  S.data.tasks.forEach(function(t){ if (t.emp===S.me.name && t.text===text && t.status!=='Готово' && (!t.due || t.due<=S.today)){ t.status='Готово'; t.done=S.today; } });
+  S.data.tasks.forEach(function(t){ if (t.emp===S.me.name && t.text===text && t.status!=='Готово' && (!t.due || t.due<=S.today)){ t.status='Готово'; t.done=S.today; t._t=Date.now(); } });
 }
 function checkIn(){
   var hm = hmNow(); setAtt('me', hm);
@@ -1400,7 +1453,7 @@ function rsPreview(){ var w = rsParse(); $('rs_prev').textContent = w ? '→ '+d
 function doReschedule(id){
   var w = rsParse(); if (!w){ toast('Не понял дату — напишите, например: завтра 10:00', true); return; }
   var t = S.data.tasks.filter(function(x){ return x.id===id; })[0]; if (!t) return;
-  t.due = w.due; t.time = w.time; if (t.status==='Готово'){ t.status='Новая'; t.done=''; }
+  t._t = Date.now(); t.due = w.due; t.time = w.time; if (t.status==='Готово'){ t.status='Новая'; t.done=''; }
   closeModal(); render(); toast('Перенесено на '+dueLbl(w.due)+(w.time?' '+w.time:''));
   bg('saveTask', {id:t.id, text:t.text, due:t.due, time:t.time, client:t.client, emp:t.emp, status:t.status, prio:t.prio, repeat:t.repeat});
 }
@@ -1428,7 +1481,7 @@ function dropTask(ev, st){ ev.preventDefault(); ev.currentTarget.classList.remov
 function moveTask(id, st){
   var t = S.data.tasks.filter(function(x){ return x.id===id; })[0];
   if (!t || t.status===st) return;
-  t.status = st; t.done = st==='Готово' ? S.today : '';
+  t._t = Date.now(); t.status = st; t.done = st==='Готово' ? S.today : '';
   render();
   bg('saveTask', {id:t.id, text:t.text, due:t.due, time:t.time, client:t.client, emp:t.emp, status:st, prio:t.prio, repeat:t.repeat});
 }
@@ -1451,10 +1504,10 @@ function saveTask(id){
   if ((t.repeat || t.time) && !t.due) t.due = S.today;
   if (!t.text){ toast('Напишите задачу', true); return; }
   var ex = S.data.tasks.filter(function(x){ return x.id===id; })[0];
-  if (ex){ ex.text=t.text; ex.due=t.due; ex.time=t.time; ex.client=t.client; ex.status=t.status; ex.prio=t.prio; ex.emp=t.emp; ex.repeat=t.repeat; ex.done = t.status==='Готово' ? (ex.done||S.today) : ''; }
+  if (ex){ ex._t=Date.now(); ex.text=t.text; ex.due=t.due; ex.time=t.time; ex.client=t.client; ex.status=t.status; ex.prio=t.prio; ex.emp=t.emp; ex.repeat=t.repeat; ex.done = t.status==='Готово' ? (ex.done||S.today) : ''; }
   else {
     t.id = Math.random().toString(16).slice(2,10);
-    S.data.tasks.push({id:t.id, emp:t.emp, text:t.text, due:t.due, time:t.time, client:t.client, status:t.status, prio:t.prio, repeat:t.repeat, by:S.me.name, created:S.today, done:t.status==='Готово'?S.today:''});
+    S.data.tasks.push({_t:Date.now(), id:t.id, emp:t.emp, text:t.text, due:t.due, time:t.time, client:t.client, status:t.status, prio:t.prio, repeat:t.repeat, by:S.me.name, created:S.today, done:t.status==='Готово'?S.today:''});
     if (t.emp !== S.me.name && !S.me.boss) S.tf = S.me.assist && t.emp===S.me.om ? 'helps' : 'byme';
   }
   closeModal(); render(); toast('Задача сохранена');
@@ -1462,6 +1515,7 @@ function saveTask(id){
 }
 function delTask(id){
   S.data.tasks = S.data.tasks.filter(function(x){ return x.id!==id; });
+  SBTGONE[id] = Date.now(); // пока база не удалила — не показываем
   closeModal(); render(); toast('Задача удалена');
   bg('deleteTask', id);
 }
