@@ -287,7 +287,8 @@ function fbCreds(){ try { return JSON.parse(store('dd_fb')||'null'); } catch(e){
 function fbLogin(id, code){
   if (!id || !fbInit()) return Promise.resolve(false);
   var email = 'e'+id+'@dentdealer.app', pass = 'dd-'+code+'-'+id;
-  return FBA.signInWithEmailAndPassword(email, pass).then(function(){ store('dd_fb', JSON.stringify({id:id, email:email, pass:pass})); return true; })
+  store('dd_fb', JSON.stringify({id:id, email:email, pass:pass})); // нужен и для базы Supabase
+  return FBA.signInWithEmailAndPassword(email, pass).then(function(){ return true; })
     .catch(function(e){ console.warn('fb login', e && e.code); return false; });
 }
 function fbStop(){ FBUNSUB.forEach(function(u){ try{ u(); }catch(e){} }); FBUNSUB = []; FBORD = false; }
@@ -313,17 +314,96 @@ function fbWatch(){
   return true;
 }
 // Мгновенные обновления: сервер после каждой записи шлёт сигнал, экран сразу берёт свежие данные.
-var SBC = null, RCH_T = null, HID_AT = 0;
+var SBC = null, SBLIVE = false, RCH_T = null, HID_AT = 0;
+function sbClient(){
+  if (SBC === null){
+    try { SBC = window.supabase && typeof SBCFG !== 'undefined' ? supabase.createClient(SBCFG.url, SBCFG.key, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'dd_sb'}}) : false; }
+    catch(e){ console.warn('sb', e); SBC = false; }
+  }
+  return SBC || null;
+}
 function sbLive(){
-  if (SBC !== null || !window.supabase || typeof SBCFG === 'undefined') return;
-  try {
-    SBC = supabase.createClient(SBCFG.url, SBCFG.key, {auth:{persistSession:false, autoRefreshToken:false}});
-    SBC.channel('dd-orders').on('broadcast', {event:'chg'}, function(){ remoteChange(); }).subscribe();
-  } catch(e){ console.warn('sb', e); SBC = false; }
+  var c = sbClient(); if (!c) return;
+  if (!SBLIVE){ SBLIVE = true; c.channel('dd-orders').on('broadcast', {event:'chg'}, function(){ remoteChange(); }).subscribe(); }
+  sbOrdersStart();
+}
+// ---------- заказы из базы Supabase ----------
+// Вход — той же служебной почтой и паролем, что и в Firebase; какие заказы видно — решает база (права по ролям).
+// Все свои заказы приходят одним запросом, дальше база сама присылает каждое изменение.
+var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {};
+function sbSignIn(){
+  var c = sbClient(), cr = fbCreds(); if (!c || !cr) return Promise.resolve(false);
+  return c.auth.getSession().then(function(r){
+    var s = r && r.data && r.data.session;
+    if (s && s.user && s.user.email === cr.email) return true;
+    return c.auth.signInWithPassword({email: cr.email, password: cr.pass}).then(function(x){ if (x.error) console.warn('sb login', x.error.message); return !x.error; });
+  }).catch(function(){ return false; });
+}
+function sbOrdersStart(){
+  if (SBCH || !S.me) return; SBCH = 'wait';
+  sbSignIn().then(function(ok){
+    if (!ok){ SBCH = null; return; }
+    SBCH = sbClient().channel('dd-ord').on('postgres_changes', {event:'*', schema:'public', table:'orders'}, function(p){
+      if (!SBORD) return;
+      if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBORD[p.old.id]; }
+      else if (p.new && p.new.id) SBORD[p.new.id] = p.new.o;
+      sbApplySoon();
+    }).subscribe(function(st){ if (st === 'SUBSCRIBED') sbLoadOrders(); }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
+  });
+}
+function sbStop(){
+  if (SBCH && SBCH !== 'wait') try { sbClient().removeChannel(SBCH); } catch(e){}
+  SBCH = null; SBORD = null; S.sbOn = false;
+  if (sbClient()) try { sbClient().auth.signOut(); } catch(e){}
+}
+function sbLoadOrders(){
+  var c = sbClient(), all = [], step = 1000;
+  var page = function(from){
+    return c.from('orders').select('id,o').order('id').range(from, from + step - 1).then(function(r){
+      if (r.error) throw r.error;
+      all = all.concat(r.data || []);
+      return (r.data || []).length === step ? page(from + step) : all;
+    });
+  };
+  return page(0).then(function(rows){ var m = {}; rows.forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; sbApply(); })
+    .catch(function(e){ console.warn('sb orders', e && e.message); });
+}
+function sbApplySoon(){ clearTimeout(SBAP_T); SBAP_T = setTimeout(sbApply, 150); }
+function byDateRow(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); }
+// заказы месяца — как их отдаёт сервер: за месяц по дате; курьеру ещё и все собранные
+function sbMonth(month){
+  var cour = courier();
+  return Object.keys(SBORD).map(function(k){ return SBORD[k]; }).filter(function(o){
+    return (cour && o.status === 'Собран') || String(o.date||'').slice(0,7) === month;
+  }).sort(byDateRow);
+}
+// заказы, которые этот экран только что изменил и ещё записывает, — показываем свою версию, пока база не догонит
+function sbMerge(list, local, month){
+  var now = Date.now(), k2 = function(o){ return o.sheet + ':' + o.row; };
+  Object.keys(SBGONE).forEach(function(k){ if (now - SBGONE[k] > 30000) delete SBGONE[k]; });
+  var keep = (local||[]).filter(function(x){ return x.saving || (x._t && now - x._t < 15000); });
+  var byKey = {}; keep.forEach(function(x){ if (x.row) byKey[k2(x)] = x; });
+  var out = list.filter(function(o){ return !SBGONE[k2(o)]; }).map(function(o){ return byKey[k2(o)] || o; });
+  keep.forEach(function(x){
+    if (out.indexOf(x) >= 0) return;
+    if (!courier() && String(x.date||'').slice(0,7) !== month) return;
+    if (x.row){ out.unshift(x); return; }
+    // новый заказ ещё записывается: если его копия из базы уже пришла — показываем один
+    var i = out.findIndex(function(o){ return !o.saving && !o._t && o.mgr === x.mgr && o.client === x.client && o.date === x.date; });
+    if (i >= 0) out[i] = x; else out.unshift(x);
+  });
+  return out;
+}
+function sbApply(){
+  if (!SBORD) return;
+  S.allOrders = Object.keys(SBORD).map(function(k){ return SBORD[k]; }); S.allStale = false;
+  Object.keys(S.cache).forEach(function(m){ var d = S.cache[m]; if (d && d.orders) d.orders = sbMerge(sbMonth(m), d.orders, m); });
+  if (S.data && S.data.month === S.month) try { store(key(), JSON.stringify(S.data)); } catch(e){}
+  if (S.tab === 'orders'){ if (remoteKey()){ QKEY = ''; refreshList(); } else softRender(); }
 }
 // сигналов может прийти несколько подряд — обновляемся один раз (и не все телефоны в одну секунду)
 function remoteChange(){ if (!S.me || !S.token) return; clearTimeout(RCH_T); RCH_T = setTimeout(pullFresh, 300 + Math.random()*900); }
-function pullFresh(){ S.allStale = true; refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
+function pullFresh(){ if (!S.sbOn) S.allStale = true; refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
 // телефон проснулся или вернулись на вкладку — сигналы за это время могли пропасть, обновляемся
 document.addEventListener('visibilitychange', function(){
   if (document.hidden) HID_AT = Date.now();
@@ -331,9 +411,9 @@ document.addEventListener('visibilitychange', function(){
 });
 // все заказы (для поиска, «не оплачены за всё время», периода и истории клиента) — тоже из зеркала
 function fbWatchOrders(){
-  if (FBORD || !S.me || !S.fbLive) return; FBORD = true;
+  if (FBORD || !S.me || !S.fbLive || S.sbOn) return; FBORD = true; // заказы из базы Supabase есть — зеркало для них не нужно
   // зеркало старше последнего изменения — для поиска берём заказы с сервера, пока зеркало не догонит
-  var onList = function(list, ver){ S.allOrders = list; if (ver >= (S.ver||0)) S.allStale = false; if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } };
+  var onList = function(list, ver){ if (S.sbOn) return; S.allOrders = list; if (ver >= (S.ver||0)) S.allStale = false; if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } };
   if (S.me.all) FBUNSUB.push(FBD.collection('orders_all').onSnapshot(function(qs){ var all = [], ver = Infinity; qs.forEach(function(d){ try { all = all.concat(JSON.parse(d.data().j)); ver = Math.min(ver, +d.data().ver || 0); } catch(e){} }); onList(all, ver === Infinity ? 0 : ver); }, function(e){ console.warn('fb orders', e && e.code); }));
   else { var id = S.me.omId || (fbCreds()||{}).id; if (id) FBUNSUB.push(FBD.doc('orders_by/'+id).onSnapshot(function(snap){ if (snap.exists) try { onList(JSON.parse(snap.data().j), +snap.data().ver || 0); } catch(e){} }, function(e){ console.warn('fb orders', e && e.code); })); }
 }
@@ -396,6 +476,7 @@ function norm(d){
 }
 function setData(d){
   norm(d);
+  if (SBORD && d.orders) d.orders = sbMerge(sbMonth(d.month), (S.cache[d.month] && S.cache[d.month].orders) || d.orders, d.month); // заказы — из базы
   S.cache[d.month] = d;
   if (d.month === S.month){ S.data = d; try { store(key(), JSON.stringify(d)); } catch(e){} }
 }
@@ -461,7 +542,7 @@ function doLogin(){
   }).catch(function(e){ $('lerr').textContent = e.message; });
 }
 $('code').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); store('dd_fb', null); fbStop(); S.fbLive = false; S.fbGot = false; S.allOrders = null; if (FBA) try { FBA.signOut(); } catch(e){} S.token=''; S.cache={}; $('code').value=''; showLogin(); }
+function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); store('dd_fb', null); fbStop(); sbStop(); S.fbLive = false; S.fbGot = false; S.allOrders = null; if (FBA) try { FBA.signOut(); } catch(e){} S.token=''; S.cache={}; $('code').value=''; showLogin(); }
 
 function applyBoot(b){
   S.tg=b.tg||{bot:'', linked:false};
@@ -932,6 +1013,7 @@ function togglePaid(i, ev){ ev.stopPropagation(); setState(i, null, !S.orders[i]
 // Заказ ещё записывается в таблицу — следующее действие с ним ждёт окончания записи (человеку ждать не нужно).
 var PEND = {};
 function afterSave(o, fn){
+  o._t = Date.now(); // свежая правка: пока база не догнала, на экране — она
   var p = o._k && PEND[o._k];
   return p ? p.then(function(pos){ if (pos){ o.row = pos.row; o.sheet = pos.sheet; } return fn(); }) : fn();
 }
@@ -1125,6 +1207,7 @@ function delOrder(){
   var o = F;
   confirmBox('Удалить заказ «'+o.client+'» на '+money(o.sum)+'? Строка удалится из таблицы.', function(){
     S.data.orders = S.data.orders.filter(function(x){ return o._k ? x._k!==o._k : !(x.row===o.row && x.sheet===o.sheet); });
+    if (o.row) SBGONE[o.sheet+':'+o.row] = Date.now(); // пока база не удалила — не показываем
     closeModal(); render(); toast('Заказ удалён');
     afterSave(o, function(){ return bg('deleteOrder', {row:o.row, sheet:o.sheet, orig:o.orig}); });
   });
