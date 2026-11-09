@@ -359,12 +359,16 @@ function sbOrdersStart(){
       if (!SBSTAT || p.eventType === 'DELETE' || !p.new || !p.new.emp) return;
       SBSTAT[p.new.emp + '|' + p.new.month] = p.new;
       sbApplySoon();
-    }).subscribe(function(st){ if (st === 'SUBSCRIBED') sbLoadOrders(); }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
+    }).on('postgres_changes', {event:'*', schema:'public', table:'bundles'}, function(p){
+      if (p.new && p.new.emp_id) sbBundleRow({ver: p.new.ver, h: p.new.h}); // сам пакет берём отдельным запросом
+    }).on('postgres_changes', {event:'*', schema:'public', table:'meta'}, function(p){
+      if (p.new && (p.new.key === 'price' || p.new.key === 'kb')) sbMetaLoad(p.new.key);
+    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
   });
 }
 function sbStop(){
   if (SBCH && SBCH !== 'wait') try { sbClient().removeChannel(SBCH); } catch(e){}
-  SBCH = null; SBORD = null; SBTASK = null; SBSTAT = null; S.sbOn = false;
+  SBCH = null; SBORD = null; SBTASK = null; SBSTAT = null; S.sbOn = false; SBBH = '';
   if (sbClient()) try { sbClient().auth.signOut(); } catch(e){}
 }
 function sbLoadOrders(){
@@ -385,6 +389,28 @@ function sbLoadOrders(){
     .catch(function(e){ console.warn('sb orders', e && e.message); });
 }
 function sbApplySoon(){ clearTimeout(SBAP_T); SBAP_T = setTimeout(sbApply, 150); }
+// Пакет экрана (клиенты, табель, команда, ЗП и т.д.) из базы — вместо Firebase. Берём, если он не старше нашей последней записи
+// и отличается от уже показанного.
+var SBBH = '';
+function sbBundleRow(r){
+  if (!r || (+r.ver || 0) < (S.ver || 0) || (r.h && r.h === SBBH)) return;
+  if (!r.j){ sbLoadBundle(); return; }
+  SBBH = r.h || '';
+  try { fbApply(JSON.parse(r.j)); } catch(e){ console.warn('sb bundle', e); }
+}
+function sbLoadBundle(){
+  var c = sbClient(), cr = fbCreds(); if (!c || !cr) return;
+  c.from('bundles').select('ver,h,j').eq('emp_id', cr.id).maybeSingle().then(function(r){ if (!r.error && r.data && r.data.j) sbBundleRow(r.data); });
+}
+// прайс и база знаний из базы
+function sbMetaLoad(k){
+  var c = sbClient(); if (!c) return;
+  c.from('meta').select('value').eq('key', k).maybeSingle().then(function(r){
+    var v = !r.error && r.data && r.data.value; if (!v) return;
+    if (k === 'price'){ if (v.items && (v.ver !== priceVer() || !(S.price || []).length)){ S.price = v.items; try { store('dd_price', JSON.stringify({ver: v.ver, items: v.items})); } catch(e){} } }
+    else if (k === 'kb' && v.docs){ S.kb = v; S.kbAll = v.docs; if (S.tab === 'kb') render(); }
+  });
+}
 function byDateRow(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); }
 // заказы месяца — как их отдаёт сервер: за месяц по дате; курьеру ещё и все собранные
 function sbMonth(month){
@@ -638,6 +664,7 @@ function start(){
   try { saved = JSON.parse(store('dd_boot') || 'null'); } catch(e){}
   if (saved){ applyBoot(saved); useMonthLocal(); }
   var slow = function(){
+    if (S.fbGot) return; // пакет уже пришёл из базы
     api('boot', priceVer()).then(function(b){
       if (S.fbGot) return; // зеркало уже всё отдало
       var d = b.data; delete b.data;
