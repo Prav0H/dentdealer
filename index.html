@@ -531,10 +531,52 @@ function filterOrders(all){
 }
 function nkeyJs(s){ var k = ' '+String(s||'').toLowerCase().replace(/[«»"'“”„]/g,'').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ')+' '; for (var i=0;i<2;i++) k = k.replace(/ (ооо|ип|ао|зао|оао|пао|новый клиент|новые клиенты) /g,' '); return k.replace(/\s+/g,' ').trim(); }
 function clientKeys(c){ return [c.name, c.legal].concat(String(c.alias||'').split(/;|\n/)).map(nkeyJs).filter(Boolean); }
+// ---------- запись через базу ----------
+// Действие сначала ложится в базу: заказ или задача у коллег меняются сразу, а при обрыве связи ничего не теряется.
+// Потом сервер Google переносит его в таблицу и отвечает тем же результатом, что раньше.
+var OPW = {saveOrder:1, setOrderState:1, deleteOrder:1, saveClient:1, addClientNote:1, saveReport:1, savePlan:1, saveTask:1, deleteTask:1,
+  checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1, markLesson:1, submitExam:1, gradeExam:1};
+var OPCTX = null;
+function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
+function opSubmit(fn, args){
+  var ctx = OPCTX; OPCTX = null;
+  var c = sbClient(); if (!c || !S.sbOn || !OPW[fn]) return null;
+  var p = {p_fn: fn, p_args: args, p_ord: null, p_del: null, p_task: null, p_tdel: null}, a = args[0];
+  if (fn === 'deleteOrder'){ if (a && a.row && a.sheet) p.p_del = a.sheet + ':' + a.row; }
+  else if (ctx && ctx.ord){ var o = opClean(ctx.ord); o.id = o.row && o.sheet ? o.sheet + ':' + o.row : 'tmp:' + (o._k || Math.random().toString(16).slice(2,10)); p.p_ord = o; }
+  if (fn === 'saveTask' && a && a.id){
+    var loc = (S.data && S.data.tasks || []).filter(function(x){ return x.id === a.id; })[0];
+    p.p_task = opClean(Object.assign({}, SBTASK && SBTASK[a.id] || {}, loc || a));
+  }
+  if (fn === 'deleteTask' && a) p.p_tdel = String(a);
+  return c.rpc('op_submit', p).then(function(r){ if (r.error) throw r.error; return r.data; });
+}
+// ответ сервера; если связь оборвалась — ждём, когда сервер выполнит действие из базы (ежеминутная проверка)
+function opWait(id){
+  return run('opRun', [S.token, id]).catch(function(e){
+    var m = String(e && e.message || e);
+    if (!/Нет связи|выполняется|JSON|Unexpected|fetch/i.test(m)) throw e;
+    return opPoll(id, Date.now());
+  });
+}
+function opPoll(id, t0){
+  return new Promise(function(r){ setTimeout(r, 4000); }).then(function(){
+    return sbClient().from('ops').select('status,res,err').eq('id', id).maybeSingle();
+  }).then(function(r){
+    var o = r && r.data;
+    if (o && o.status === 'done') return o.res;
+    if (o && o.status === 'error') throw new Error(o.err || 'Ошибка');
+    if (Date.now() - t0 > 180000) throw new Error('Сохранено в базе, таблица обновится позже');
+    return opPoll(id, t0);
+  });
+}
 function api(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
-  return run(fn, fn === 'login' ? [args[0]] : [S.token].concat(args)).then(function(x){ busy(-1); return x; }, function(e){
+  var sub = fn !== 'login' ? opSubmit(fn, args) : null;
+  var call = sub ? sub.then(function(id){ return opWait(id); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
+    : run(fn, fn === 'login' ? [args[0]] : [S.token].concat(args));
+  return call.then(function(x){ busy(-1); return x; }, function(e){
     busy(-1);
     var m = String(e && e.message || e).replace(/^Error:\s*/,'').replace(/^Exception:\s*/,'');
     if (m.indexOf('AUTH') >= 0){ store('dd_tok', null); showLogin(); throw new Error('Войдите заново'); }
@@ -1099,7 +1141,7 @@ var PEND = {};
 function afterSave(o, fn){
   o._t = Date.now(); // свежая правка: пока база не догнала, на экране — она
   var p = o._k && PEND[o._k];
-  return p ? p.then(function(pos){ if (pos){ o.row = pos.row; o.sheet = pos.sheet; } return fn(); }) : fn();
+  return p ? p.then(function(pos){ if (pos){ o.row = pos.row; o.sheet = pos.sheet; } OPCTX = {ord: o}; return fn(); }) : (OPCTX = {ord: o}, fn());
 }
 function setState(i, status, paid){
   closeMenu();
@@ -1279,7 +1321,7 @@ function saveOrder(){
   if (!(S.data.clients||[]).some(function(c){ return c.name.toLowerCase()===o.client.toLowerCase(); }))
     (S.data.clients = S.data.clients||[]).unshift({name:o.client, addr:o.addr, disc:o.disc/100, trade:o.trade, mgr:o.mgr, phone:'', comment:'', n:1, sum:o.sum, last:o.date});
   closeModal(); render(); toast('Заказ сохранён');
-  var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; return api('saveOrder', o); });
+  var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; if (form.row){ shown.row = form.row; shown.sheet = form.sheet; } OPCTX = {ord: shown}; return api('saveOrder', o); });
   p = p.then(function(pos){ return typeof pos === 'number' ? {row: pos} : pos; }); // старый сервер отвечал только номером строки
   PEND[k] = p.then(function(pos){ return pos; }, function(){ return null; });
   p.then(function(pos){
