@@ -612,7 +612,8 @@ function drawOrders(){
   var isPaid = function(o){ return !!o.paid; }; // отметка «Оплачен» ставится вручную для любого заказа
   if (S.of === 'unpaid') list = list.filter(function(o){ return !isPaid(o); });
   else if (S.of) list = list.filter(function(o){ return S.of==='none' ? !o.status : o.status===S.of; });
-  if (S.me.acc) list = list.slice().reverse(); // бухгалтеру — от старых к новым, новые внизу
+  list = byAdded(list); // последний внесённый — сверху
+  if (S.me.acc) list = list.reverse(); // бухгалтеру — от старых к новым, новые внизу
   var tmode = tableMode();
   if (tmode){ S.tbase = list; list = tableFilter(list); }
   S.orders = list;
@@ -634,7 +635,21 @@ function drawOrders(){
   if (fid && $(fid)){ var f = $(fid); f.focus(); try { if (fpos != null) f.setSelectionRange(fpos, fpos); } catch(e){} }
 }
 // Фильтры по столбцам таблицы (часть текста; статус и оплата — из списка) и сортировка по датам.
-var TF = {}, TS = null;
+var TF = {}, TS = (function(){ try { return JSON.parse(store('dd_ts')||'null'); } catch(e){ return null; } })();
+function saveTS(){ store('dd_ts', TS ? JSON.stringify(TS) : null); }
+// Порядок добавления: лист месяца (архив — раньше всех) и строка в нём; ещё не записанные — самые новые.
+var MONI = {'январь':1,'февраль':2,'март':3,'апрель':4,'май':5,'июнь':6,'июль':7,'август':8,'сентябрь':9,'октябрь':10,'ноябрь':11,'декабрь':12};
+function sheetKey(s){
+  var m = /^([а-яё]+)(-[а-яё]+)?(\d{2})?$/i.exec(String(s||'').trim()); if (!m) return 0;
+  var mo = MONI[(m[2] ? m[2].slice(1) : m[1]).toLowerCase()] || 0;
+  return m[2] ? 1 : (+(m[3]||26))*100 + mo; // «Январь-Сентябрь26» — архив
+}
+function byAdded(list){
+  return list.slice().sort(function(a,b){
+    var ra = a.row ? sheetKey(a.sheet)*100000 + a.row : 1e12, rb = b.row ? sheetKey(b.sheet)*100000 + b.row : 1e12;
+    return rb - ra;
+  });
+}
 var TCOLS = [['date','Дата','d'],['mgr','Менеджер'],['client','Клиент'],['addr','Адрес'],['order','Заказ'],['disc','Скидка'],['sum','Сумма'],['trade','Торг.'],
   ['inv','Счёт'],['cash','Нал/безнал'],['status','Статус'],['ship','Отгрузка','d'],['deliv','Доставка','d'],['paid','Оплачен']];
 var EMPTY = '— пусто';
@@ -705,8 +720,8 @@ var TFV = [], TFK = '';
 function tfToggle(v, on){ var a = (TF[TFK] || []).filter(function(x){ return x !== v; }); if (on) a.push(v); TF[TFK] = a; drawOrders(); }
 function tfAll(k, on){ TF[k] = []; drawOrders(); Array.prototype.forEach.call(document.querySelectorAll('#menu input[type=checkbox]'), function(cb){ cb.checked = false; }); if (on) closeMenu(); }
 function tfFind(inp){ var q = inp.value.trim().toLowerCase(); Array.prototype.forEach.call(document.querySelectorAll('#menu label'), function(l){ l.style.display = !q || l.dataset.v.indexOf(q) >= 0 ? '' : 'none'; }); }
-function setTS(f){ TS = TS && TS.f===f ? (TS.dir===1 ? {f:f, dir:-1} : null) : {f:f, dir:1}; drawOrders(); }
-function clearTF(){ TF = {}; TS = null; closeMenu(); drawOrders(); }
+function setTS(f){ TS = TS && TS.f===f ? (TS.dir===1 ? {f:f, dir:-1} : null) : {f:f, dir:1}; saveTS(); drawOrders(); }
+function clearTF(){ TF = {}; TS = null; saveTS(); closeMenu(); drawOrders(); }
 // Кнопка статуса (меню — только тем, кто может его менять) и отметка оплаты (безнал — всегда оплачен).
 function stBtn(o,i){ var st = stCls(o.status); return canSt() ? '<button class="tag '+st+'" onclick="statusMenu('+i+',event)">'+(o.status?esc(o.status)+' ':'')+'▾</button>' : o.status ? '<span class="tag '+st+'">'+esc(o.status)+'</span>' : ''; }
 function paidBtn(o,i){
