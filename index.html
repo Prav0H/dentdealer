@@ -16,8 +16,11 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 // Быстрое хранилище (Firebase): открытые настройки проекта — это адрес, а не пароль.
+// Сигналы «данные изменились» (Supabase Realtime): публичный адрес и публичный ключ, не пароль.
+var SBCFG = { url: "https://mtesawbuzibtnmoxevyl.supabase.co", key: "sb_publishable_0nbf2ukbFwbkG7H241f8Fg_kx4jQKPy" };
 var FBCFG = { apiKey: "AIzaSyA2yacRRrlJOg7Sc-IDIMfArcOwqDPihpE", authDomain: "dentdealer-26b90.firebaseapp.com", projectId: "dentdealer-26b90" };
 if (typeof API_URL === 'undefined') var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
 </script>
@@ -309,12 +312,30 @@ function fbWatch(){
   S.fbLive = true;
   return true;
 }
+// Мгновенные обновления: сервер после каждой записи шлёт сигнал, экран сразу берёт свежие данные.
+var SBC = null, RCH_T = null, HID_AT = 0;
+function sbLive(){
+  if (SBC !== null || !window.supabase || typeof SBCFG === 'undefined') return;
+  try {
+    SBC = supabase.createClient(SBCFG.url, SBCFG.key, {auth:{persistSession:false, autoRefreshToken:false}});
+    SBC.channel('dd-orders').on('broadcast', {event:'chg'}, function(){ remoteChange(); }).subscribe();
+  } catch(e){ console.warn('sb', e); SBC = false; }
+}
+// сигналов может прийти несколько подряд — обновляемся один раз (и не все телефоны в одну секунду)
+function remoteChange(){ if (!S.me || !S.token) return; clearTimeout(RCH_T); RCH_T = setTimeout(pullFresh, 300 + Math.random()*900); }
+function pullFresh(){ S.allStale = true; refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
+// телефон проснулся или вернулись на вкладку — сигналы за это время могли пропасть, обновляемся
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) HID_AT = Date.now();
+  else if (HID_AT && Date.now() - HID_AT > 20000 && S.me && S.token) pullFresh();
+});
 // все заказы (для поиска, «не оплачены за всё время», периода и истории клиента) — тоже из зеркала
 function fbWatchOrders(){
   if (FBORD || !S.me || !S.fbLive) return; FBORD = true;
-  var onList = function(list){ S.allOrders = list; if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } };
-  if (S.me.all) FBUNSUB.push(FBD.collection('orders_all').onSnapshot(function(qs){ var all = []; qs.forEach(function(d){ try { all = all.concat(JSON.parse(d.data().j)); } catch(e){} }); onList(all); }, function(e){ console.warn('fb orders', e && e.code); }));
-  else { var id = S.me.omId || (fbCreds()||{}).id; if (id) FBUNSUB.push(FBD.doc('orders_by/'+id).onSnapshot(function(snap){ if (snap.exists) try { onList(JSON.parse(snap.data().j)); } catch(e){} }, function(e){ console.warn('fb orders', e && e.code); })); }
+  // зеркало старше последнего изменения — для поиска берём заказы с сервера, пока зеркало не догонит
+  var onList = function(list, ver){ S.allOrders = list; if (ver >= (S.ver||0)) S.allStale = false; if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } };
+  if (S.me.all) FBUNSUB.push(FBD.collection('orders_all').onSnapshot(function(qs){ var all = [], ver = Infinity; qs.forEach(function(d){ try { all = all.concat(JSON.parse(d.data().j)); ver = Math.min(ver, +d.data().ver || 0); } catch(e){} }); onList(all, ver === Infinity ? 0 : ver); }, function(e){ console.warn('fb orders', e && e.code); }));
+  else { var id = S.me.omId || (fbCreds()||{}).id; if (id) FBUNSUB.push(FBD.doc('orders_by/'+id).onSnapshot(function(snap){ if (snap.exists) try { onList(JSON.parse(snap.data().j), +snap.data().ver || 0); } catch(e){} }, function(e){ console.warn('fb orders', e && e.code); })); }
 }
 function fbApply(b){
   var d = b.data; delete b.data; delete b.price;
@@ -471,6 +492,7 @@ function applyBoot(b){
   if (t==='salary' || t==='plan') t = 'stats';
   S.tab = !tabs.some(function(x){ return x[0]===t; }) ? tabs[0][0] : t;
   markTab();
+  sbLive();
 }
 function start(){
   // сначала — то, что сохранено в телефоне (экран появляется сразу), потом свежее с сервера
@@ -583,7 +605,7 @@ function refreshList(){
   if (!k){ QR=null; QKEY=''; drawOrders(); return; }
   if (k === QKEY && QR){ drawOrders(); return; }
   QKEY = k; QR = null;
-  if (S.allOrders){ QR = filterOrders(S.allOrders); drawOrders(); return; }
+  if (S.allOrders && !S.allStale){ QR = filterOrders(S.allOrders); drawOrders(); return; }
   if ($('olist')) $('olist').innerHTML = '<div class="empty">Загружаю…</div>';
   api('getOrders', {mgr: ocur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
 }
