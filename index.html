@@ -330,7 +330,7 @@ function sbLive(){
 // ---------- заказы из базы Supabase ----------
 // Вход — той же служебной почтой и паролем, что и в Firebase; какие заказы видно — решает база (права по ролям).
 // Все свои заказы приходят одним запросом, дальше база сама присылает каждое изменение.
-var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {};
+var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {}, SBEV_AT = 0;
 function sbSignIn(){
   var c = sbClient(), cr = fbCreds(); if (!c || !cr) return Promise.resolve(false);
   return c.auth.getSession().then(function(r){
@@ -345,6 +345,7 @@ function sbOrdersStart(){
     if (!ok){ SBCH = null; return; }
     SBCH = sbClient().channel('dd-ord').on('postgres_changes', {event:'*', schema:'public', table:'orders'}, function(p){
       if (!SBORD) return;
+      SBEV_AT = Date.now();
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBORD[p.old.id]; }
       else if (p.new && p.new.id) SBORD[p.new.id] = p.new.o;
       sbApplySoon();
@@ -403,7 +404,10 @@ function sbApply(){
 }
 // сигналов может прийти несколько подряд — обновляемся один раз (и не все телефоны в одну секунду)
 function remoteChange(){ if (!S.me || !S.token) return; clearTimeout(RCH_T); RCH_T = setTimeout(pullFresh, 300 + Math.random()*900); }
-function pullFresh(){ if (!S.sbOn) S.allStale = true; refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
+function pullFresh(){
+  if (!S.sbOn) S.allStale = true;
+  else setTimeout(function(){ if (Date.now() - SBEV_AT > 4000) sbLoadOrders(); }, 2500); // изменения из базы не пришли — перечитываем
+  refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
 // телефон проснулся или вернулись на вкладку — сигналы за это время могли пропасть, обновляемся
 document.addEventListener('visibilitychange', function(){
   if (document.hidden) HID_AT = Date.now();
