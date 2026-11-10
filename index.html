@@ -560,7 +560,12 @@ function opSubmit(fn, args){
     p.p_task = opClean(Object.assign({}, SBTASK && SBTASK[a.id] || {}, loc || a));
   }
   if (fn === 'deleteTask' && a) p.p_tdel = String(a);
-  return c.rpc('op_submit', p).then(function(r){ if (r.error) throw r.error; return r.data; });
+  return c.rpc('op_submit', p).then(function(r){
+    if (r.error) throw r.error;
+    // заказ уже в базе (коллеги его видят) — показываем как обычный; в таблицу он допишется в фоне
+    if (ctx && ctx.ord && ctx.ord.saving === true){ ctx.ord.saving = 'base'; try { redrawOrder(ctx.ord); } catch(e){} }
+    return r.data;
+  });
 }
 // ответ сервера; если связь оборвалась — ждём, когда сервер выполнит действие из базы (ежеминутная проверка)
 function opWait(id){
@@ -584,11 +589,11 @@ function opPoll(id, t0){
 function api(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
-  var sub = fn !== 'login' ? opSubmit(fn, args) : null;
-  var call = sub ? sub.then(function(id){ return opWait(id); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
+  var sub = fn !== 'login' ? opSubmit(fn, args) : null, held = true, rel = function(){ if (held){ held = false; busy(-1); } };
+  var call = sub ? sub.then(function(id){ rel(); return opWait(id); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
     : run(fn, fn === 'login' ? [args[0]] : [S.token].concat(args));
-  return call.then(function(x){ busy(-1); return x; }, function(e){
-    busy(-1);
+  return call.then(function(x){ rel(); return x; }, function(e){
+    rel();
     var m = String(e && e.message || e).replace(/^Error:\s*/,'').replace(/^Exception:\s*/,'');
     if (m.indexOf('AUTH') >= 0){ store('dd_tok', null); showLogin(); throw new Error('Войдите заново'); }
     toast(m, true); throw new Error(m);
@@ -967,10 +972,10 @@ function paidBtn(o,i){
 }
 function orderCard(o,i){
   var mgr = ocur();
-  return '<div class="item'+(o.saving?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
+  return '<div class="item'+(o.saving===true?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
     '<div class="s">'+dmy(o.date)+(S.me.all&&!mgr?' · '+esc(o.mgr):'')+' · '+esc(o.order)+'</div>'+(wh()&&o.addr?'<div class="s">📍 '+esc(addrLine(o.addr)||o.addr)+'</div>':'')+'<div class="tags">'+
     (wh()&&o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
-    (o.saving?'<span class="tag">записывается…</span>':'')+stBtn(o,i)+paidBtn(o,i)+
+    (o.saving===true?'<span class="tag">записывается…</span>':'')+stBtn(o,i)+paidBtn(o,i)+
     (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
     (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
 }
@@ -991,7 +996,7 @@ function orderTable(list){
   }).join('');
   return (any?'<div class="note" style="display:flex;gap:8px;align-items:center">Показаны заказы по фильтрам: '+list.length+' <button class="btn sec sm" onclick="clearTF()">Сбросить фильтры</button></div>':'')+
     '<div class="tw"><table class="ot"><thead><tr>'+head+'</tr></thead><tbody>'+
-    (list.length ? list.map(function(o,i){ return '<tr data-i="'+i+'"'+(o.saving?' class="saving"':'')+(ed?'':' onclick="viewOrder('+i+')"')+'>'+orderRow(o,i)+'</tr>'; }).join('')
+    (list.length ? list.map(function(o,i){ return '<tr data-i="'+i+'"'+(o.saving===true?' class="saving"':'')+(ed?'':' onclick="viewOrder('+i+')"')+'>'+orderRow(o,i)+'</tr>'; }).join('')
       : '<tr><td colspan="'+TCOLS.length+'" class="empty">Заказов нет</td></tr>')+
     '</tbody></table></div>'+(ed?'<div class="note">Нажмите на ячейку, чтобы изменить значение; Enter — сохранить, Esc — отменить. Клиент открывает заказ целиком. Нажмите на заголовок с датой, чтобы отсортировать.</div>':'');
 }
@@ -1005,7 +1010,7 @@ function orderRow(o, i){
 function redrawOrder(o){
   var i = S.orders.indexOf(o), tr = i >= 0 && document.querySelector('#olist tr[data-i="'+i+'"]');
   if (!tr || !S.lastTable){ drawOrders(); return; }
-  tr.className = o.saving ? 'saving' : ''; tr.innerHTML = orderRow(o, i);
+  tr.className = o.saving === true ? 'saving' : ''; tr.innerHTML = orderRow(o, i);
 }
 var CELLS = {mgr:'select', addr:'area', order:'area', disc:'num', sum:'num', trade:'bool', inv:'text', cash:'cash', date:'date', ship:'date', deliv:'date'};
 function cellEdit(ev, i, f){
