@@ -728,12 +728,10 @@ function start(){
       if (first || d.month === S.month) render(); else useMonth();
     }).catch(function(){});
   };
-  var cr = fbCreds();
-  if (cr && fbInit()){
-    var timer = setTimeout(slow, 4000), done = false; // зеркало не ответило за 4 с — идём на сервер
-    var go = function(){ if (done) return; done = true; if (fbWatch()){ var chk = setInterval(function(){ if (S.fbGot){ clearTimeout(timer); clearInterval(chk); } }, 200); setTimeout(function(){ clearInterval(chk); }, 5000); } else slow(); };
-    if (FBA.currentUser) go();
-    else { var off = FBA.onAuthStateChanged(function(u){ off(); if (u) go(); else FBA.signInWithEmailAndPassword(cr.email, cr.pass).then(go, function(){ clearTimeout(timer); slow(); }); }); }
+  // пакет экрана приходит из базы Supabase (вход — при показе сохранённого экрана); не пришёл за 4 с — берём с сервера
+  if (S.me && sbClient()){
+    var timer = setTimeout(slow, 4000), chk = setInterval(function(){ if (S.fbGot){ clearTimeout(timer); clearInterval(chk); } }, 200);
+    setTimeout(function(){ clearInterval(chk); }, 6000);
   } else slow();
 }
 function priceVer(){ try { return JSON.parse(store('dd_price')||'{}').ver || ''; } catch(e){ return ''; } }
