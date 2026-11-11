@@ -374,7 +374,8 @@ function sbOrdersStart(){
       if (p.new && p.new.emp_id) sbBundleRow({ver: p.new.ver, h: p.new.h}); // сам пакет берём отдельным запросом
     }).on('postgres_changes', {event:'*', schema:'public', table:'meta'}, function(p){
       if (p.new && (p.new.key === 'price' || p.new.key === 'kb')) sbMetaLoad(p.new.key);
-    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
+      else if (p.new && p.new.key === 'appver') appVerCheck(p.new.value && p.new.value.v);
+    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); sbMetaLoad('appver'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
   });
 }
 function sbStop(){
@@ -420,8 +421,34 @@ function sbMetaLoad(k){
     var v = !r.error && r.data && r.data.value; if (!v) return;
     if (k === 'price'){ if (v.items && (v.ver !== priceVer() || !(S.price || []).length)){ S.price = v.items; try { store('dd_price', JSON.stringify({ver: v.ver, items: v.items})); } catch(e){} } }
     else if (k === 'kb' && v.docs){ S.kb = v; S.kbAll = v.docs; if (S.tab === 'kb') render(); }
+    else if (k === 'appver') appVerCheck(v.v);
   });
 }
+// ---------- новая версия программы — обновляемся сами ----------
+var APPV = 46, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
+function updUrl(){
+  if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
+  try { var u = new URL(location.href); u.searchParams.set('v', UPD_V); return u.toString(); } catch(e){ return location.href; } // новый адрес — минуя старую копию в кэше
+}
+function updBar(){
+  if ($('updbar')) return; var d = document.createElement('div'); d.id = 'updbar';
+  d.style.cssText = 'position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:30;background:#1f2937;color:#fff;padding:8px 14px;border-radius:10px;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+  d.innerHTML = 'Вышла новая версия · <a target="_top" style="color:#93c5fd;font-weight:600" href="' + esc(updUrl()) + '">Обновить</a>';
+  document.body.appendChild(d);
+}
+function anySaving(){ var d = S.data || {}; return loading > 0 || ['orders', 'tasks'].some(function(k){ return (d[k] || []).some(function(o){ return o && o.saving; }); }); }
+function appUpdate(){
+  clearTimeout(UPD_T); if (!UPD_V) return;
+  var t = {}; try { t = JSON.parse(store('dd_upd') || '{}') || {}; } catch(e){}
+  if (t.v === UPD_V && Date.now() - t.t < 15*60000) return; // уже перезагружались, а страница ещё старая — остаётся только кнопка
+  var a = document.activeElement, typing = a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.value;
+  var calm = document.hidden || Date.now() - LAST_ACT > 60000;
+  if (!calm || !$('modal').classList.contains('hidden') || typing || anySaving()){ UPD_T = setTimeout(appUpdate, 15000); return; }
+  store('dd_upd', JSON.stringify({v: UPD_V, t: Date.now()}));
+  try { if (GAS) window.top.location.href = updUrl(); else location.replace(updUrl()); } catch(e){}
+}
+setInterval(function(){ if (SBCH && SBCH !== 'wait') sbMetaLoad('appver'); }, 5*60000);
 function byDateRow(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); }
 // заказы месяца — как их отдаёт сервер: за месяц по дате; курьеру ещё и все собранные
 function sbMonth(month){
@@ -497,7 +524,7 @@ function pullFresh(){
   refresh(); if (S.tab==='orders' && remoteKey()){ QKEY = ''; refreshList(); } }
 // телефон проснулся или вернулись на вкладку — сигналы за это время могли пропасть, обновляемся
 document.addEventListener('visibilitychange', function(){
-  if (document.hidden) HID_AT = Date.now();
+  if (document.hidden){ HID_AT = Date.now(); if (UPD_V) appUpdate(); } // ушли с вкладки — удобный момент обновиться
   else if (HID_AT && Date.now() - HID_AT > 20000 && S.me && S.token) pullFresh();
 });
 // все заказы (для поиска, «не оплачены за всё время», периода и истории клиента) — тоже из зеркала
