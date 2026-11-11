@@ -889,7 +889,7 @@ function sheetKey(s){
 }
 function byAdded(list){
   return list.slice().sort(function(a,b){
-    var ra = a.row ? sheetKey(a.sheet)*100000 + a.row : 1e12, rb = b.row ? sheetKey(b.sheet)*100000 + b.row : 1e12;
+    var ra = a.row && a.sheet !== 'tmp' ? sheetKey(a.sheet)*100000 + a.row : 1e12, rb = b.row && b.sheet !== 'tmp' ? sheetKey(b.sheet)*100000 + b.row : 1e12;
     return rb - ra;
   });
 }
@@ -938,7 +938,9 @@ function trSet(k, on){
 }
 function tableFilter(list){
   list = list.filter(function(o){ return tpass(o); });
-  if (TS){ var f = TS.f, d = TS.dir; list = list.slice().sort(function(a,b){ var x = a[f]||'', y = b[f]||''; if (!x !== !y) return x ? -1 : 1; return x < y ? -d : x > y ? d : 0; }); }
+  if (TS){ var f = TS.f, d = TS.dir, ak = function(o){ return o.row && o.sheet !== 'tmp' ? sheetKey(o.sheet)*100000 + o.row : 1e12; };
+    list = list.slice().sort(function(a,b){ var x = a[f]||'', y = b[f]||''; if (!x !== !y) return x ? -1 : 1; if (x < y) return -d; if (x > y) return d;
+      var p = ak(a), q = ak(b); return p < q ? -d : p > q ? d : 0; }); } // одинаковые — по порядку внесения
   return list;
 }
 // Список значений столбца с галочками (можно выбрать несколько); значения — из заказов с учётом остальных фильтров.
