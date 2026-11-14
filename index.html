@@ -428,7 +428,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 47, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 48, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1410,15 +1410,17 @@ function vSalary(){
     '<div class="stat" style="cursor:pointer" onclick="goUnpaid(\''+esc(n)+'\')"><small>Ждёт оплаты клиентом (за всё время)</small><b>+'+money(up.bonus)+'</b><small>не оплачено заказов: '+up.n+' на '+money(up.sum)+' ›</small></div></div>';
   h += '<div class="card"><h3>'+esc(n)+' · '+MON[+S.month.slice(5,7)-1]+'</h3>'+(s.lines.length?'<table>'+
     s.lines.map(function(l){ return '<tr><td>'+esc(l.label)+'</td><td class="n"><b>'+(l.value==null?'—':l.pct?pct(l.value):money(l.value))+'</b></td></tr>'; }).join('')+'</table>':'<div class="note">В листе «'+esc(n)+'. ЗП» нет расчёта за этот месяц.</div>')+
-    '<div class="note">Считается в листе «'+esc(n)+'. ЗП». Бонус с продаж — только по оплаченным заказам и идёт в месяц оплаты: заказ октября, оплаченный в ноябре, — в бонус ноября.</div></div>';
+    '<div class="note">Считается в листе «'+esc(n)+'. ЗП». Оклада нет — только бонусы. Бонус с продаж — по оплаченным заказам и идёт в месяц оплаты: заказ октября, оплаченный в ноябре, — в бонус ноября.</div></div>';
   h += '<div class="card"><h3>Условия</h3><table>'+s.cond.map(function(c){ return '<tr><td>'+esc(c.label)+'</td><td class="n">'+money(c.value)+'</td></tr>'; }).join('')+'</table>'+
     '<table style="margin-top:8px"><tr><th>Скидка клиенту</th><th class="n">Бонус с продаж</th></tr>'+s.tiers.map(function(t,i){
       var to = s.tiers[i+1] ? ' – '+Math.round(s.tiers[i+1][0]*100-1)+'%' : ' и больше';
       return '<tr><td>'+Math.round(t[0]*100)+'%'+to+'</td><td class="n">'+pct(t[1])+'</td></tr>'; }).join('')+
     '<tr><td>Торгующая компания (15%-30%)</td><td class="n">1,5%</td></tr></table></div>';
-  h += '<div class="card"><h3>Бонус по заказам</h3>'+(orders.length?'<div class="scroll"><table><tr><th>Дата</th><th>Клиент</th><th class="n">Сумма</th><th class="n">%</th><th class="n">Бонус</th></tr>'+
+  var bsum = paid.reduce(function(a,o){ return a + (o.bonus ? o.bonus.sum : 0); }, 0);
+  h += '<div class="card"><button class="btn sec" style="width:100%" onclick="S.zpOpen=!S.zpOpen;vSalary()">'+(S.zpOpen?'▾ Скрыть':'▸ Показать')+' заказы в расчёте этого месяца: '+paid.length+' на бонус '+money(bsum)+'</button>'+
+    (S.zpOpen ? (orders.length?'<div class="note">В расчёт входят заказы, оплаченные в этом месяце (по дате оплаты). Серые — заказы месяца, ещё не оплаченные: их бонус придёт в месяц оплаты.</div><div class="scroll"><table><tr><th>Дата</th><th>Клиент</th><th class="n">Сумма</th><th class="n">%</th><th class="n">Бонус</th></tr>'+
     paid.concat(wait).map(function(o){ return '<tr style="'+(o.paid?'':'color:var(--mute)')+'"><td>'+dmy(o.date).slice(0,5)+'</td><td>'+esc(o.client)+(o.paid?(o.paidAt&&o.paidAt.slice(0,7)!==o.date.slice(0,7)?' <span class="tag gray">оплачен '+dmy(o.paidAt).slice(0,5)+'</span>':''):' <span class="tag warn">не оплачен</span>')+'</td><td class="n">'+money(o.sum)+'</td><td class="n">'+pct(o.bonus.rate)+'</td><td class="n">'+money(o.bonus.sum)+'</td></tr>'; }).join('')+
-    '</table></div>':'<div class="empty">Заказов в этом месяце нет</div>')+'</div>';
+    '</table></div>':'<div class="empty">Заказов в этом месяце нет</div>') : '')+'</div>';
   v.innerHTML = h;
 }
 
@@ -2117,14 +2119,14 @@ function editEmp(i){
     '<label class="f'+(e.role==='Ассистент'?'':' hidden')+'" id="e_helps_w">Помогает (заказы — от его имени, видит его задачи)<select id="e_helps">'+sales.map(function(x){ return '<option value="'+esc(x.name)+'"'+(x.name===e.helps?' selected':'')+'>'+esc(x.fio||x.name)+'</option>'; }).join('')+'</select></label>'+
     '<label class="f">Почта Google<input id="e_email" type="email" value="'+esc(e.email)+'"></label>'+
     '<label class="f">Телефон<input id="e_phone" inputmode="tel" value="'+esc(e.phone)+'"></label>'+
-    '<div class="row2"><label class="f">Оклад, ₽'+(isNew?'':' (пусто — не менять)')+'<input id="e_sal" inputmode="numeric"></label><label class="f">Бонус за качество, ₽<input id="e_qb" inputmode="numeric"></label></div>'+
+    '<label class="f">Бонус за качество, ₽'+(isNew?'':' (пусто — не менять)')+'<input id="e_qb" inputmode="numeric"></label>'+
     '<label class="chk"><input type="checkbox" id="e_acc"> Дать доступ к самой таблице (редактор)</label>'+
     (isNew?'<div class="note">Будет создан лист «Имя. ЗП» по образцу Екатерины и личный код входа. Это занимает около 10 секунд.</div>':'')+
     '<div class="acts">'+(isNew?'':'<button class="btn bad" onclick="removeEmp(\''+esc(e.name)+'\')">Удалить</button><button class="btn sec" onclick="newCode(\''+esc(e.name)+'\')">Новый код</button>')+'<button class="btn" id="e_save" onclick="saveEmp('+(isNew?'':'\''+esc(e.name)+'\'')+')">Сохранить</button></div>');
 }
 function saveEmp(name){
   var e = {name: name || $('e_name').value.trim(), edit: !!name, role:$('e_role').value, surname:$('e_sur').value.trim(), helps:$('e_helps').value, email:$('e_email').value.trim(), phone:$('e_phone').value.trim(),
-    salary:$('e_sal').value.trim(), qbonus:$('e_qb').value.trim(), access:$('e_acc').checked};
+    salary:'', qbonus:$('e_qb').value.trim(), access:$('e_acc').checked};
   $('e_save').disabled = true; $('e_save').textContent = 'Сохраняю…';
   api('saveEmployee', e).then(function(code){ closeModal(); toast(name?'Сохранено':'Сотрудник добавлен, код: '+code); refreshTeam(); }).catch(function(){ $('e_save').disabled=false; $('e_save').textContent='Сохранить'; });
 }
