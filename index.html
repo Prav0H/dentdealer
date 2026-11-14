@@ -380,9 +380,9 @@ function sbOrdersStart(){
     }).on('postgres_changes', {event:'*', schema:'public', table:'bundles'}, function(p){
       if (p.new && p.new.emp_id) sbBundleRow({ver: p.new.ver, h: p.new.h}); // сам пакет берём отдельным запросом
     }).on('postgres_changes', {event:'*', schema:'public', table:'meta'}, function(p){
-      if (p.new && (p.new.key === 'price' || p.new.key === 'kb')) sbMetaLoad(p.new.key);
+      if (p.new && (p.new.key === 'price' || p.new.key === 'kb' || p.new.key === 'promos')) sbMetaLoad(p.new.key);
       else if (p.new && p.new.key === 'appver') appVerCheck(p.new.value && p.new.value.v);
-    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); sbMetaLoad('appver'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
+    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); sbMetaLoad('appver'); sbMetaLoad('promos'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
   });
 }
 function sbStop(){
@@ -429,10 +429,11 @@ function sbMetaLoad(k){
     if (k === 'price'){ if (v.items && (v.ver !== priceVer() || !(S.price || []).length)){ S.price = v.items; try { store('dd_price', JSON.stringify({ver: v.ver, items: v.items})); } catch(e){} } }
     else if (k === 'kb' && v.docs){ S.kb = v; S.kbAll = v.docs; if (S.tab === 'kb') render(); }
     else if (k === 'appver') appVerCheck(v.v);
+    else if (k === 'promos' && v.items) setPromos(v.items);
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 50, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 51, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1326,7 +1327,8 @@ function addCustom(){
 }
 function addLine(art){
   var p = S.price.filter(function(x){ return x.art===art; })[0];
-  F.lines.push({art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:p.rub&&(p.perPack||1)===1?'шт':'уп', qty:1});
+  var nl = {art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:p.rub&&(p.perPack||1)===1?'шт':'уп', qty:1};
+  promoApply(nl); F.lines.push(nl); // действующая акция на товар — сразу в строке
   $('f_find').value=''; $('f_sug').innerHTML=''; drawLines();
 }
 function drawLines(){
@@ -1341,7 +1343,7 @@ function drawLines(){
     return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> <span class="ls">'+money(lineFinal(l, discK()))+'</span><small>'+(l.custom?'цена за шт, ₽: <input class="cprice" inputmode="decimal" style="width:90px" value="'+(l.rub||'')+'" oninput="F.lines['+i+'].rub=num(this.value);recalc(true)">':esc(l.name)+' · '+base+' за '+l.unit)+'</small></div>'+
       '<input inputmode="numeric" value="'+l.qty+'" oninput="F.lines['+i+'].qty=+this.value||0;recalc(true)">'+
       (one?'<select disabled><option>шт</option></select>':'<select onchange="F.lines['+i+'].unit=this.value;drawLines()"><option'+(l.unit==='уп'?' selected':'')+'>уп</option><option'+(l.unit==='шт'?' selected':'')+'>шт</option></select>')+
-      '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button><div class="opt">'+opt+'</div></div>';
+      '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button><div class="opt">'+(l.promo?'<span class="tag">🏷 '+esc(l.promo.title)+(l.promo.cond?' · '+esc(l.promo.cond):'')+'</span>':'')+opt+'</div></div>';
   }).join('');
   recalc();
 }
@@ -1399,6 +1401,111 @@ function delOrder(){
   });
 }
 
+
+// ---------- акции ----------
+S.promos = (function(){ try { return JSON.parse(store('dd_promos')||'[]'); } catch(e){ return []; } })();
+function setPromos(items){ S.promos = items || []; try { store('dd_promos', JSON.stringify(S.promos)); } catch(e){} if (S.tab==='clients' && (CF==='promo')) render(); }
+function promoArts(p){ return String(p.arts||'').split(/[,;\n]+/).map(function(x){ return x.trim().toLowerCase(); }).filter(Boolean); }
+function promoLive(p, day){ day = day || S.today; return p.on !== false && (!p.from || p.from <= day) && (!p.to || p.to >= day); }
+function promoState(p){ return p.on === false ? 'off' : p.to && p.to < S.today ? 'end' : p.from && p.from > S.today ? 'soon' : 'live'; }
+// Действующая акция на товар (по артикулу; «*» — на все товары). Дата — дата заказа.
+function promoFor(art, day){
+  var a = String(art||'').toLowerCase();
+  return (S.promos||[]).filter(function(p){ if (!promoLive(p, day)) return false; var l = promoArts(p); return l.indexOf(a)>=0 || l.indexOf('*')>=0; })
+    .sort(function(x,y){ return (promoArts(y).indexOf('*')<0) - (promoArts(x).indexOf('*')<0); })[0] || null; // точная акция важнее акции «на всё»
+}
+function promoApply(l){
+  var p = promoFor(l.art, $('f_date') ? $('f_date').value : S.today); if (!p) return;
+  l.promo = {id:p.id, title:p.title, cond:p.cond}; l.opt = 1;
+  if (p.kind === 'price'){ l.own = true; l.ownRub = p.val; if (!(l.rub && (l.perPack||1)===1)) l.unit = p.unit === 'уп' ? 'уп' : 'шт'; }
+  else l.ld = p.val;
+  toast('Применена акция «'+p.title+'» — можно изменить');
+}
+function promoTxt(p){ return p.kind === 'price' ? 'цена '+money(p.val)+' за '+(p.unit||'шт') : 'скидка '+p.val+'%'; }
+function vPromos(){
+  var list = (S.promos||[]).slice().sort(function(a,b){ var o = {live:0, soon:1, off:2, end:3}; return o[promoState(a)] - o[promoState(b)] || (b.from||'').localeCompare(a.from||''); });
+  var lbl = {live:['ok','действует'], soon:['blue','скоро'], off:['gray','выключена'], end:['gray','закончилась']};
+  return (S.me.boss?'<div class="bar"><span class="note" style="margin:0;flex:1">Действующие акции сами подставляются в заказ, когда добавляют товар.</span><button class="btn" onclick="editPromo()">+ Акция</button></div>':'<div class="note">Действующие акции сами подставляются в заказ, когда добавляете товар. Их можно изменить в строке заказа.</div>')+
+    (list.length ? '<div class="list">'+list.map(function(p, i){ var st = lbl[promoState(p)];
+      return '<div class="item"'+(S.me.boss?' onclick="editPromo('+i+')"':'')+'><div class="t"><b>🏷 '+esc(p.title)+'</b><span class="tag '+st[0]+'">'+st[1]+'</span></div>'+
+        '<div class="s">'+esc(promoTxt(p))+' · '+(promoArts(p).indexOf('*')>=0?'на все товары':'товары: '+esc(p.arts))+'</div>'+
+        '<div class="tags">'+(p.from||p.to?'<span class="tag gray">'+(p.from?'с '+dmy(p.from):'')+(p.to?' по '+dmy(p.to):'')+'</span>':'<span class="tag gray">без срока</span>')+(p.cond?'<span class="tag gray">'+esc(p.cond)+'</span>':'')+'</div></div>'; }).join('')+'</div>'
+      : '<div class="card empty">Акций пока нет'+(S.me.boss?' — нажмите «+ Акция»':'')+'</div>');
+}
+var PL = null;
+function editPromo(i){
+  PL = i===undefined ? null : (S.promos||[]).slice().sort(function(a,b){ var o = {live:0, soon:1, off:2, end:3}; return o[promoState(a)] - o[promoState(b)] || (b.from||'').localeCompare(a.from||''); })[i];
+  var p = PL || {title:'', arts:'', kind:'pct', val:'', unit:'шт', cond:'', from:S.today, to:'', on:true};
+  openModal('<h2><span>'+(PL?'Акция':'Новая акция')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Название<input id="p_title" value="'+esc(p.title)+'" placeholder="Например: Ноябрь — кости Medipac −10%"></label>'+
+    '<label class="f">Артикулы через запятую (* — на все товары)<textarea id="p_arts" placeholder="BG-B05, 9003">'+esc(p.arts)+'</textarea></label><div id="p_artn" class="note" style="margin-top:2px"></div>'+
+    '<div class="row2"><label class="f">Что даём<select id="p_kind" onchange="$(\'p_unitw\').style.display=this.value===\'price\'?\'\':\'none\'"><option value="pct"'+(p.kind!=='price'?' selected':'')+'>Скидка, %</option><option value="price"'+(p.kind==='price'?' selected':'')+'>Своя цена, ₽</option></select></label>'+
+    '<label class="f">Размер<input id="p_val" inputmode="decimal" value="'+esc(p.val)+'"></label></div>'+
+    '<label class="f" id="p_unitw" style="'+(p.kind==='price'?'':'display:none')+'">Цена за<select id="p_unit"><option'+(p.unit!=='уп'?' selected':'')+'>шт</option><option'+(p.unit==='уп'?' selected':'')+'>уп</option></select></label>'+
+    '<div class="row2"><label class="f">С<input type="date" id="p_from" value="'+esc(p.from||'')+'"></label><label class="f">По (пусто — без срока)<input type="date" id="p_to" value="'+esc(p.to||'')+'"></label></div>'+
+    '<label class="f">Условия (необязательно)<textarea id="p_cond" placeholder="Например: при заказе от 3 упаковок; только для клиник">'+esc(p.cond)+'</textarea></label>'+
+    '<label class="chk"><input type="checkbox" id="p_on"'+(p.on!==false?' checked':'')+'> Акция включена</label>'+
+    '<div class="acts">'+(PL?'<button class="btn bad" onclick="delPromo()">Удалить</button>':'<button class="btn ghost" onclick="closeModal()">Отмена</button>')+'<button class="btn" onclick="savePromo()">Сохранить</button></div>');
+  var chk = function(){ var l = promoArts({arts:$('p_arts').value}).filter(function(a){ return a!=='*'; }), miss = l.filter(function(a){ return !S.price.some(function(x){ return x.art.toLowerCase()===a; }); });
+    $('p_artn').textContent = l.length ? 'Товаров: '+l.length+(miss.length?' · нет в прайсе: '+miss.join(', '):'') : ''; };
+  $('p_arts').oninput = chk; chk();
+}
+function savePromo(){
+  var p = {id: PL ? PL.id : '', title:$('p_title').value.trim(), arts:$('p_arts').value.trim(), kind:$('p_kind').value, val:num($('p_val').value), unit:$('p_unit').value,
+    from:$('p_from').value, to:$('p_to').value, cond:$('p_cond').value.trim(), on:$('p_on').checked};
+  if (!p.title){ toast('Укажите название', true); return; }
+  if (!p.arts){ toast('Укажите артикулы или *', true); return; }
+  if (!(p.val > 0)){ toast('Укажите размер скидки или цену', true); return; }
+  var list = (S.promos||[]).filter(function(x){ return !PL || x.id!==PL.id; }); list.unshift(Object.assign({}, p, {id: p.id || 'tmp'}));
+  setPromos(list); closeModal(); render(); toast('Акция сохранена');
+  api('savePromo', p).then(setPromos).catch(function(){});
+}
+function delPromo(){ var p = PL; confirmBox('Удалить акцию «'+p.title+'»?', function(){ setPromos((S.promos||[]).filter(function(x){ return x.id!==p.id; })); closeModal(); render(); api('deletePromo', p.id).then(setPromos).catch(function(){}); }); }
+
+// ---------- рассылка ----------
+function mailOf(c){ var m = String((c.email||'')+' '+(c.addr||'')).match(/[^\s@;,<>()]+@[^\s@;,<>()]+\.[a-zа-я]{2,}/i); return m ? m[0] : ''; }
+S.mailOff = {};
+function vMail(list){
+  var mi = S.mailInfo, withMail = list.filter(mailOf), on = withMail.filter(function(c){ return !S.mailOff[c.name]; });
+  if (!mi){ api('mailInfo').then(function(x){ S.mailInfo = x; if (CF==='mail') render(); }).catch(function(){}); }
+  var snd = !mi ? '<div class="note">Загрузка настроек почты…</div>' : mi.from
+    ? '<div class="note" style="margin:0">Отправитель: <b>'+esc(mi.name)+'</b>, ответы придут на <b>'+esc(mi.from)+'</b>'+(mi.quota>=0?' · сегодня можно отправить ещё '+mi.quota+' писем':'')+' · <a href="#" onclick="S.mailEdit=1;render();return false">изменить</a></div>' : '';
+  if (mi && (!mi.from || S.mailEdit)) snd += '<div class="card" style="margin:8px 0 0"><b>Почта отправителя</b><div class="note" style="margin:4px 0 8px">На неё придёт код подтверждения, и на неё клиенты будут отвечать.</div>'+
+    '<div class="row2"><label class="f">Почта<input id="ms_mail" value="'+esc(mi.from||'')+'" placeholder="info@…"></label><label class="f">Имя отправителя<input id="ms_name" value="'+esc(mi.name||'Dent Dealer')+'"></label></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn sec" onclick="mailCode()">Отправить код</button></div>'+
+    (S.mailSent?'<div class="row2" style="margin-top:6px"><label class="f">Код из письма<input id="ms_code" inputmode="numeric"></label><div style="display:flex;align-items:flex-end"><button class="btn" onclick="mailConfirm()">Подтвердить</button></div></div>':'')+'</div>';
+  return '<div class="card" style="margin-top:0">'+snd+'</div>'+
+    '<div class="card"><h3>Кому · '+on.length+' из '+withMail.length+' с почтой</h3><div class="note" style="margin:0 0 6px">Получатели — клиенты по фильтрам выше и поиску. Без почты: '+(list.length-withMail.length)+'.</div>'+
+      '<div class="acts" style="margin:0 0 6px"><button class="btn ghost sm" onclick="S.mailOff={};render()">Отметить всех</button><button class="btn ghost sm" onclick="'+"S.mailOff={};S.clist.forEach(function(c){S.mailOff[c.name]=1});render()"+'">Снять всех</button></div>'+
+      '<div style="max-height:260px;overflow:auto">'+withMail.slice(0,500).map(function(c, i){ return '<label class="chk" style="margin:2px 0"><input type="checkbox"'+(S.mailOff[c.name]?'':' checked')+' onchange="mailPick('+i+',this.checked)"> '+esc(c.name)+' <small style="color:var(--mute)">'+esc(mailOf(c))+'</small></label>'; }).join('')+'</div></div>'+
+    '<div class="card"><h3>Письмо</h3><label class="f">Тема<input id="m_subj" value="'+esc(S.mailSubj||'')+'" oninput="S.mailSubj=this.value"></label>'+
+      '<label class="f">Текст — {клиент} заменится названием клиента<textarea id="m_text" style="min-height:160px" oninput="S.mailText=this.value">'+esc(S.mailText||'Здравствуйте, {клиент}!\n\n')+'</textarea></label>'+
+      ((S.promos||[]).some(function(p){ return promoState(p)!=='end' && p.on!==false; })?'<label class="f">Вставить акцию<select onchange="mailPromo(this.value);this.value=\'\'"><option value="">— выберите —</option>'+(S.promos||[]).filter(function(p){ return promoState(p)!=='end' && p.on!==false; }).map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.title)+'</option>'; }).join('')+'</select></label>':'')+
+      '<div class="acts"><button class="btn" onclick="mailSend()">Отправить '+on.length+' письм'+(on.length%10===1&&on.length%100!==11?'о':'а')+'</button></div></div>';
+}
+function mailPick(i, on){ var c = S.clist.filter(mailOf)[i]; if (!c) return; if (on) delete S.mailOff[c.name]; else S.mailOff[c.name] = 1; render(); }
+function mailPromo(id){
+  var p = (S.promos||[]).filter(function(x){ return x.id===id; })[0]; if (!p) return;
+  var t = '\n🏷 '+p.title+'\n'+promoTxt(p)+(promoArts(p).indexOf('*')>=0?' на все товары':' на: '+p.arts)+(p.to?'\nДействует до '+dmy(p.to):'')+(p.cond?'\nУсловия: '+p.cond:'')+'\n';
+  S.mailText = ($('m_text').value||'') + t; if (!S.mailSubj) S.mailSubj = p.title; render();
+}
+function mailCode(){
+  var e = $('ms_mail').value.trim(), n = $('ms_name').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){ toast('Проверьте адрес почты', true); return; }
+  toast('Отправляю код…'); api('mailSenderStart', e, n).then(function(){ S.mailSent = 1; toast('Код отправлен на '+e); render(); }).catch(function(){});
+}
+function mailConfirm(){ var c = $('ms_code').value.trim(); if (!c) return; api('mailSenderConfirm', c).then(function(x){ S.mailInfo = x; S.mailEdit = 0; S.mailSent = 0; toast('Почта подтверждена'); render(); }).catch(function(){}); }
+function mailSend(){
+  var to = S.clist.filter(mailOf).filter(function(c){ return !S.mailOff[c.name]; }).map(function(c){ return {name:c.name, email:mailOf(c)}; });
+  var subj = $('m_subj').value.trim(), text = $('m_text').value.trim();
+  if (!S.mailInfo || !S.mailInfo.from){ toast('Сначала укажите и подтвердите почту отправителя', true); return; }
+  if (!to.length){ toast('Нет получателей', true); return; }
+  if (!subj || !text){ toast('Заполните тему и текст', true); return; }
+  confirmBox('Отправить письмо «'+subj+'» '+to.length+' клиентам? Отменить отправку будет нельзя.', function(){
+    toast('Отправляю '+to.length+' писем…');
+    api('sendMailing', {subject:subj, text:text, to:to}).then(function(r){ S.mailInfo.quota = r.quota; toast('Отправлено: '+r.sent+(r.bad.length?' · не ушло: '+r.bad.length:'')); render(); }).catch(function(){});
+  });
+}
 
 // ---------- зарплата ----------
 function vSalary(){
@@ -1767,6 +1874,7 @@ function vClients(){
   if (CF==='soon') CF = 'all';
   base = base.filter(cfPass);
   var due = base.filter(dueCall);
+  var chip0 = function(k, t){ return '<button class="'+(CF===k?'on':'')+'" onclick="CF=\''+k+'\';render()">'+t+'</button>'; };
   var list = (CF==='due' ? due : base).slice().sort(function(a,b){
     if (CF==='due') return daysLate(b) - daysLate(a);
     if (CS==='sum') return yearSum(b) - yearSum(a) || b.sum - a.sum;
@@ -1780,10 +1888,13 @@ function vClients(){
     if (CS==='reg') return (b.reg||'') < (a.reg||'') ? -1 : (b.reg||'') > (a.reg||'') ? 1 : 0;
     return (b.last||'') < (a.last||'') ? -1 : (b.last||'') > (a.last||'') ? 1 : b.n - a.n;
   });
+  var seg = '<div class="seg">'+chip0('all','Все · '+base.length)+chip0('due','🔔 Пора звонить · '+due.length)+chip0('promo','🏷 Акции')+(S.me.boss?chip0('mail','✉ Рассылка'):'')+'</div>';
+  if (CF==='promo'){ v.innerHTML = seg + vPromos(); return; }
+  if (CF==='mail'){ S.clist = list; v.innerHTML = '<div class="bar"><input id="cq" placeholder="Поиск клиентов для рассылки" value="'+esc(CQ)+'"></div>' + seg + cfPanel() + vMail(list); var t0; $('cq').oninput = function(){ clearTimeout(t0); t0 = setTimeout(function(){ CQ = $('cq').value.trim(); render(); }, 400); }; if (keep){ var q0=$('cq'); q0.focus(); q0.setSelectionRange(q0.value.length,q0.value.length); } return; }
   S.clist = list.slice(0, 200);
   var chip = function(k, t){ return '<button class="'+(CF===k?'on':'')+'" onclick="CF=\''+k+'\';render()">'+t+'</button>'; };
   v.innerHTML = '<div class="bar"><input id="cq" placeholder="Поиск: название, юр. название, ЛПР, телефон" value="'+esc(CQ)+'"><button class="btn" onclick="editClient()">+ Клиент</button></div>'+
-    '<div class="seg">'+chip('all','Все · '+base.length)+chip('due','🔔 Пора звонить · '+due.length)+'</div>'+
+    seg+
     (CF==='due'?'<div class="note" style="margin:0 2px 8px">Считаем по интервалу закупок из карточки, а если его нет — по тому, как часто клиент заказывал раньше (📈). Если последний заказ был меньше месяца назад, клиент сюда не попадает.</div>':'')+
     cfPanel()+'<div class="bar" style="margin:0 2px 8px"><span class="note" style="margin:0;flex:1">'+(CQ?'Найдено: '+list.length:(mine?'Ваши клиенты: ':'Клиентов: ')+list.length)+'</span>'+
     '<select style="width:auto" onchange="CS=this.value;render()">'+[['last','Недавно заказывали'],['old','Давно не заказывали'],['freq','Чаще заказывают'],['rare','Реже заказывают'],['n','Больше заказов'],['n1','Меньше заказов'],
