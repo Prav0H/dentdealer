@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <meta charset="utf-8">
 <title>Dent Dealer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#3b6fd8">
+<meta name="theme-color" content="#1A5CAB">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Dent Dealer">
@@ -23,18 +24,21 @@ if (typeof API_URL === 'undefined') var API_URL = "https://script.google.com/mac
 </script>
 <style>
 :root{
-  --bg:#f4f6fa;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;
-  --pri:#3b6fd8;--pri-soft:#e3ecfb;--ok:#2f9e6b;--ok-soft:#ddf3e8;--warn:#c07a12;--warn-soft:#fdf0d9;
+  --bg:#f4f7fb;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;
+  --pri:#1A5CAB;--pri-soft:#e4eef9;--acc:#22C0E6;--acc-soft:#e1f6fc;--ok:#2f9e6b;--ok-soft:#ddf3e8;--warn:#c07a12;--warn-soft:#fdf0d9;
   --bad:#c94141;--bad-soft:#fbe3e3;--vio-soft:#ece6fb;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 Montserrat,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none!important}
 .wrap{max-width:900px;margin:0 auto;padding:0 12px 96px}
-header{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 12px 8px;border-bottom:1px solid var(--line)}
+header{position:sticky;top:0;z-index:5;background:linear-gradient(90deg,#1A5CAB,#1f78c8);color:#fff;padding:10px 12px 8px;box-shadow:0 2px 8px rgba(26,92,171,.25)}
+header .who{color:rgba(255,255,255,.8)}header .month{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.28);color:#fff}header .month button{color:#fff}
+header .btn.ghost{color:#fff;border-color:rgba(255,255,255,.45)}header select{color:var(--ink)}
+.brand svg{height:28px;width:auto;flex:none}
 .hrow{max-width:900px;margin:0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.brand{font-weight:700;font-size:17px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:300;font-size:19px;letter-spacing:.4px}
 .who{color:var(--mute);font-size:13px}
 .sp{flex:1}
 .month{display:flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:10px}
@@ -73,7 +77,7 @@ label.f>input,label.f>select,label.f>textarea{margin-top:4px}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;max-width:150px;border:0;background:none;padding:8px 2px 10px;color:var(--mute);font-size:12px;cursor:pointer}
 nav button i{display:block;font-style:normal;font-size:20px;line-height:1.2}
-nav button.on{color:var(--pri);font-weight:600}
+nav button.on{color:var(--pri);font-weight:600;box-shadow:inset 0 3px 0 var(--acc)}
 .modal{position:fixed;inset:0;z-index:10;background:rgba(15,23,42,.35);display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:var(--bg);width:100%;max-width:640px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
 @media(min-width:700px){.modal{align-items:center}.sheet{border-radius:18px}}
@@ -121,7 +125,9 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .rs-b{flex:1;min-width:0}
 .rs-m{display:flex;flex-direction:column;gap:4px}
 .sec-t{font-size:13px;color:var(--mute);margin:16px 2px 6px;text-transform:uppercase;letter-spacing:.04em}
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#1A5CAB,#22C0E6)}
+#login .card{box-shadow:0 12px 40px rgba(10,40,90,.3);border:0}#login .dd-mark{height:76px;width:auto}#login h2{font-weight:300;font-size:28px;letter-spacing:.5px}
+#login .tagline{font-size:12px;color:var(--mute);letter-spacing:.4px;margin-top:2px}
 #login .card{width:100%;max-width:340px;text-align:center;padding:24px}
 #login input{text-align:center;font-size:24px;letter-spacing:.3em;margin:16px 0}
 .logo{width:56px;height:56px;border-radius:16px;background:var(--pri);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:22px}
@@ -198,8 +204,9 @@ mark{background:#fff3b0;border-radius:3px;padding:0 1px}
 
 <div id="login" class="hidden">
   <div class="card">
-    <div class="logo">DD</div>
-    <h2 style="margin:12px 0 0">Dent Dealer</h2>
+    <svg class="dd-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="12 8 38 52"><polygon fill="#1A5CAB" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter" points="16.5,30 35.5,12 35.5,18.5 16.5,36.5"/><polygon fill="#22C0E6" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter" points="26.5,32 45.5,14 45.5,20.5 26.5,38.5"/><polygon fill="#1A5CAB" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter" points="16.5,49 35.5,31 35.5,37.5 16.5,55.5"/><polygon fill="#22C0E6" stroke="#fff" stroke-width="1.2" stroke-linejoin="miter" points="26.5,51 45.5,33 45.5,39.5 26.5,57.5"/></svg>
+    <h2 style="margin:8px 0 0">Dent Dealer</h2>
+    <div class="tagline">The Best for Dentists</div>
     <div class="note">Введите личный код сотрудника</div>
     <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="3" placeholder="•••">
     <button class="btn" style="width:100%" onclick="doLogin()">Войти</button>
@@ -210,7 +217,7 @@ mark{background:#fff3b0;border-radius:3px;padding:0 1px}
 <div id="app" class="hidden">
   <header>
     <div class="hrow">
-      <div><div class="brand">Dent Dealer</div><div class="who" id="who"></div></div>
+      <div><div class="brand"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="12 8 38 52"><polygon fill="#ffffff" points="16.5,30 35.5,12 35.5,18.5 16.5,36.5"/><polygon fill="#7fdcf3" points="26.5,32 45.5,14 45.5,20.5 26.5,38.5"/><polygon fill="#ffffff" points="16.5,49 35.5,31 35.5,37.5 16.5,55.5"/><polygon fill="#7fdcf3" points="26.5,51 45.5,33 45.5,39.5 26.5,57.5"/></svg>Dent Dealer</div><div class="who" id="who"></div></div>
       <div class="sp"></div>
       <div class="month"><button onclick="shiftMonth(-1)">‹</button><span id="mon"></span><button onclick="shiftMonth(1)">›</button></div>
       <select id="mgr" class="hidden" style="width:auto;min-width:130px" onchange="S.mgr=this.value;render()"></select>
@@ -433,7 +440,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 51, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 52, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
