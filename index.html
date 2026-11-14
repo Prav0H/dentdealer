@@ -92,6 +92,9 @@ nav button.on{color:var(--pri);font-weight:600}
 .line input,.line select{padding:6px;text-align:center}
 .line .nm{font-size:13px}.line .nm small{color:var(--mute);display:block}
 .line button{border:0;background:none;color:var(--bad);font-size:18px;cursor:pointer}
+.line .opt{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--mute)}
+.line .opt label{display:flex;align-items:center;gap:5px}.line .opt input[type=checkbox]{width:auto}.line .opt input{width:80px;padding:4px 6px}
+.line .opt a{color:var(--mute);text-decoration:none;border-bottom:1px dashed var(--line)}
 .total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:12px;background:var(--pri-soft);border-radius:12px;font-weight:600}
 .acts{display:flex;gap:8px;margin-top:16px}
 .acts .btn{flex:1}
@@ -425,7 +428,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 46, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 47, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1254,7 +1257,7 @@ function editOrder(i, preset){
   };
   ['f_disc','f_dlv','f_sum'].forEach(function(id){ $(id).addEventListener('input', id==='f_sum' ? showTotal : recalc); });
   $('f_trade').onchange = drawLines;
-  F.base0 = linesTotal(); // стоимость распознанных строк на момент открытия — чтобы сумма менялась только на то, что изменили
+  F.base0 = linesFinal(1-(F.disc||0)); // стоимость распознанных строк на момент открытия — чтобы сумма менялась только на то, что изменили
   cashChanged();
   drawLines();
 }
@@ -1269,14 +1272,19 @@ function addrFromCard(){
 function parseLines(){
   var rest = [];
   String(F.order||'').split(/,\s*/).forEach(function(part){
-    var m = part.trim().match(/^(.+?)\s*-\s*(\d+(?:[.,]\d+)?)\s*(уп|шт)\.?$/i), art = m && m[1].trim().toLowerCase();
+    var m = part.trim().match(/^(.+?)\s*-\s*(\d+(?:[.,]\d+)?)\s*(уп|шт)\.?(?:\s+по\s+(\d+(?:[.,]\d+)?)\s*₽)?(?:\s+скидка\s+(\d+(?:[.,]\d+)?)\s*%)?$/i), art = m && m[1].trim().toLowerCase();
     var p = m && S.price.filter(function(x){ return x.art.toLowerCase()===art; })[0];
-    if (p) F.lines.push({art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:m[3].toLowerCase()==='уп'?'уп':'шт', qty:num(m[2])});
+    var ex = m ? {own: !!m[4], ownRub: m[4] ? num(m[4]) : 0, ld: m[5] ? num(m[5]) : 0} : null; // своя цена ₽ и скидка на товар
+    if (p) F.lines.push(Object.assign({art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:m[3].toLowerCase()==='уп'?'уп':'шт', qty:num(m[2])}, ex));
+    else if (m && m[4]) F.lines.push({art:m[1].trim(), name:'своя позиция', custom:true, eur:0, eurPack:0, rub:num(m[4]), perPack:1, unit:m[3].toLowerCase()==='уп'?'уп':'шт', qty:num(m[2]), ld: ex.ld});
     else if (part.trim()) rest.push(part.trim());
   });
   F.extra = rest.join(', ');
 }
-function linesTotal(){ return F.lines.reduce(function(s,l){ return s + unitPrice(l, l.unit)*l.qty; }, 0); }
+// Строка заказа со скидкой: своя скидка на товар — вместо общей; своя цена — уже итоговая (общая скидка к ней не применяется).
+function lineFinal(l, d){ var s = unitPrice(l, l.unit)*l.qty; return l.ld ? s*(1-l.ld/100) : l.own ? s : s*d; }
+function linesFinal(d){ return F.lines.reduce(function(s,l){ return s + lineFinal(l, d); }, 0); }
+function discK(){ return 1 - num($('f_disc') ? $('f_disc').value : (F.disc||0)*100)/100; }
 // адрес из последнего заказа клиента, если в карточке пусто
 function lastAddr(name){
   var k = String(name||'').toLowerCase(), o = (S.data.orders||[]).filter(function(x){ return x.client.toLowerCase()===k && x.addr; })[0];
@@ -1284,7 +1292,7 @@ function lastAddr(name){
 }
 function showTotal(){ if ($('f_total')) $('f_total').textContent = money(num($('f_sum').value) + num($('f_dlv').value)); if ($('f_rate')) $('f_rate').textContent = rate(); }
 // Цена строки за единицу: товары с ценой в рублях — без курса €, остальные — по курсу.
-function unitPrice(p, unit){ if (p.custom) return p.rub||0; return p.rub ? p.rub*(unit==='уп'?(p.perPack||1):1) : (unit==='уп'?p.eurPack:p.eur)*rate(); }
+function unitPrice(p, unit){ if (p.custom) return p.rub||0; if (p.own) return p.ownRub||0; return p.rub ? p.rub*(unit==='уп'?(p.perPack||1):1) : (unit==='уп'?p.eurPack:p.eur)*rate(); }
 var LAT = {'а':'a','в':'b','е':'e','к':'k','м':'m','н':'h','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x'};
 function simple(t){ return String(t||'').toLowerCase().replace(/ё/g,'е').replace(/[авекмнорстух]/g, function(ch){ return LAT[ch]; }).replace(/,/g,'.').replace(/×/g,'x'); }
 // Поиск по любому слову: артикул, название, группа, материал, аналог, размер, гранулы, цена. Все слова запроса должны найтись.
@@ -1319,31 +1327,36 @@ function addLine(art){
 }
 function drawLines(){
   $('f_lines').innerHTML = F.lines.map(function(l,i){
-    var pr = unitPrice(l, l.unit), one = l.custom || (l.rub && (l.perPack||1)===1);
-    return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> '+money(pr*l.qty)+'<small>'+(l.custom?'цена за шт, ₽: <input class="cprice" inputmode="decimal" style="width:90px" value="'+(l.rub||'')+'" oninput="F.lines['+i+'].rub=num(this.value);recalc(true)">':esc(l.name))+'</small></div>'+
+    var pr = unitPrice(l, l.unit), one = l.custom || (l.rub && (l.perPack||1)===1), L = 'F.lines['+i+']';
+    var eu = !l.custom && !l.rub ? (l.unit==='уп'?l.eurPack:l.eur) : 0, open = l.own || l.ld || l.opt;
+    var base = l.own ? 'по прайсу '+(eu ? eu+' € = ' : '')+money(l.rub ? l.rub*(l.unit==='уп'?(l.perPack||1):1) : eu*rate()) : (eu ? eu+' € · ' : '')+money(pr);
+    var opt = open ? '<label><input type="checkbox"'+(l.own?' checked':'')+' onchange="'+L+'.own=this.checked;if(this.checked&&!'+L+'.ownRub)'+L+'.ownRub=Math.round(unitPrice('+L+','+L+'.unit));drawLines()"> своя цена за '+l.unit+', ₽</label>'+
+        (l.own ? '<input class="oprice" inputmode="decimal" value="'+(l.ownRub||'')+'" oninput="'+L+'.ownRub=num(this.value);recalc(true)">' : '')+
+        '<label>скидка на товар, %<input inputmode="decimal" placeholder="как в заказе" value="'+(l.ld||'')+'" oninput="'+L+'.ld=num(this.value);recalc(true)"></label>'
+      : '<a href="#" onclick="'+L+'.opt=1;drawLines();return false">своя цена / скидка на товар</a>';
+    return '<div class="line"><div class="nm"><b>'+esc(l.art)+'</b> <span class="ls">'+money(lineFinal(l, discK()))+'</span><small>'+(l.custom?'цена за шт, ₽: <input class="cprice" inputmode="decimal" style="width:90px" value="'+(l.rub||'')+'" oninput="F.lines['+i+'].rub=num(this.value);recalc(true)">':esc(l.name)+' · '+base+' за '+l.unit)+'</small></div>'+
       '<input inputmode="numeric" value="'+l.qty+'" oninput="F.lines['+i+'].qty=+this.value||0;recalc(true)">'+
       (one?'<select disabled><option>шт</option></select>':'<select onchange="F.lines['+i+'].unit=this.value;drawLines()"><option'+(l.unit==='уп'?' selected':'')+'>уп</option><option'+(l.unit==='шт'?' selected':'')+'>шт</option></select>')+
-      '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button></div>';
+      '<button onclick="F.lines.splice('+i+',1);drawLines()">×</button><div class="opt">'+opt+'</div></div>';
   }).join('');
   recalc();
 }
 // Сумма пересчитывается, только когда в заказе есть товары из прайса (иначе — как ввели руками).
 function recalc(keepLines){
-  if (keepLines===true){
-    var nodes=document.querySelectorAll('#f_lines .nm b');
-    F.lines.forEach(function(l,i){ var el=nodes[i]; if(el && el.nextSibling) el.nextSibling.textContent=' '+money(unitPrice(l, l.unit)*l.qty); });
-  }
+  var nodes = document.querySelectorAll('#f_lines .ls'), dk = discK();
+  F.lines.forEach(function(l,i){ if (nodes[i]) nodes[i].textContent = money(lineFinal(l, dk)); }); // сумма каждой строки — с её скидкой
   if (!$('f_sum')) return;
   if (F.lines.length || F.base0){
     // товары из прайса считаются по ценам и скидке; то, что осталось в заказе текстом (без цены), — по прежней сумме
-    var d = 1-num($('f_disc').value)/100;
-    var rest = F.row ? Math.max(0, ((F.sum||0)-(F.dlv||0)) - (F.base0||0)*(1-(F.disc||0))) : 0;
-    $('f_sum').value = Math.ceil(linesTotal()*d + rest); // суммы заказов — вверх до целого рубля
+    var rest = F.row ? Math.max(0, ((F.sum||0)-(F.dlv||0)) - (F.base0||0)) : 0;
+    $('f_sum').value = Math.ceil(linesFinal(discK()) + rest); // суммы заказов — вверх до целого рубля
   }
   showTotal();
 }
 function saveOrder(){
-  var lines = F.lines.filter(function(l){ return l.qty>0; }).map(function(l){ return l.art+' - '+l.qty+' '+l.unit; });
+  var lines = F.lines.filter(function(l){ return l.qty>0; }).map(function(l){
+    var pr = l.own ? l.ownRub : l.custom ? l.rub : 0;
+    return l.art+' - '+l.qty+' '+l.unit+(pr ? ' по '+pr+' ₽' : '')+(l.ld ? ' скидка '+l.ld+'%' : ''); });
   var txt = lines.join(', ');
   var extra = $('f_order') ? $('f_order').value.trim() : '';
   var o = {
