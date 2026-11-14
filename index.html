@@ -180,6 +180,13 @@ body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:
 .mic.rec{background:var(--bad);color:#fff;animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.6}}
 .kb-text{white-space:pre-wrap;line-height:1.5;font-size:15px}
+.kb-doc{font-size:15px;line-height:1.65;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.kb-doc h3{font-size:17px;margin:22px 0 8px;color:var(--pri);padding-bottom:6px;border-bottom:2px solid var(--pri-soft)}.kb-doc h3:first-child{margin-top:0}
+.kb-doc h4{font-size:15px;margin:16px 0 6px}
+.kb-doc p{margin:0 0 10px}.kb-doc p.np{padding-left:2.6em;text-indent:-2.6em}.kb-doc p.np b{color:var(--pri);display:inline-block;min-width:2.4em;text-indent:0}
+.kb-doc ul,.kb-doc ol{margin:0 0 12px;padding-left:22px}.kb-doc li{margin:4px 0}.kb-doc li::marker{color:var(--pri)}
+.kb-doc .lead{font-weight:600}
+.kb-dl{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}.kb-dl .btn{flex:1;text-align:center;text-decoration:none;min-width:120px}
 mark{background:#fff3b0;border-radius:3px;padding:0 1px}
 .lesson{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer}
 .lesson .ok{color:var(--ok);font-weight:700;width:18px}
@@ -425,7 +432,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 49, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 50, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1888,6 +1895,40 @@ function saveClient(orig){
 // ---------- база знаний ----------
 var KQ = '';
 // подсветка найденного и фрагмент текста вокруг первого совпадения
+// Текст документа → аккуратная вёрстка: «1. Раздел» — заголовок, «1.1.» — пункт с номером, «- …» — список, «Важно:» — подзаголовок.
+function kbFmt(text){
+  var out = [], list = null, para = [];
+  var flushP = function(){ if (para.length){ out.push('<p>'+para.map(hl).join('<br>')+'</p>'); para = []; } };
+  var flushL = function(){ if (list){ out.push('<'+list.t+'>'+list.items.join('')+'</'+list.t+'>'); list = null; } };
+  var addLi = function(t, txt){ flushP(); if (list && list.t !== t) flushL(); if (!list) list = {t:t, items:[]}; list.items.push('<li>'+hl(txt)+'</li>'); };
+  String(text||'').replace(/\r/g,'').split('\n').forEach(function(raw){
+    var s = raw.trim(), m;
+    if (!s){ flushP(); flushL(); return; }
+    if ((m = s.match(/^[-•–—*▪●]\s*(.+)$/))) return addLi('ul', m[1]);
+    if ((m = s.match(/^(\d{1,2}|[а-яa-z])\)\s*(.+)$/i))) return addLi('ol', m[2]);
+    flushL();
+    if ((m = s.match(/^(\d{1,2})\.\s+(.{2,80})$/)) && !/[.;,]$/.test(s)){ flushP(); out.push('<h3>'+hl(s)+'</h3>'); return; }
+    if ((m = s.match(/^(\d+(?:\.\d+)+\.?)\s+(.+)$/))){ flushP(); out.push('<p class="np"><b>'+esc(m[1])+'</b>'+hl(m[2])+'</p>'); return; }
+    if (s.length <= 70 && (/:$/.test(s) || (s === s.toUpperCase() && /[А-ЯA-Z]{3}/.test(s)))){ flushP(); out.push('<h4>'+hl(s.replace(/:$/,''))+'</h4>'); return; }
+    para.push(s);
+  });
+  flushP(); flushL();
+  return '<div class="kb-doc">'+out.join('')+'</div>';
+}
+// Скачать документ: Google-документ/таблица — файлом от Google; иначе — из текста.
+function kbGid(d){ var l = d.link||'', m = l.match(/docs\.google\.com\/(document|spreadsheets)\/d\/([\w-]+)/); return m ? {kind: m[1], id: m[2]} : null; }
+function kbDl(i, fmt){
+  var d = S.kbl[i], g = kbGid(d);
+  if (g){ var f = fmt==='pdf' ? 'pdf' : g.kind==='document' ? 'docx' : 'xlsx'; window.open('https://docs.google.com/'+g.kind+'/d/'+g.id+'/export?format='+f, '_blank'); return; }
+  if (!d.text){ toast('У документа нет текста — откройте файл', true); return; }
+  var html = '<html><head><meta charset="utf-8"><title>'+esc(d.title)+'</title><style>body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;margin:24px 32px;color:#1f2937}h1{font-size:18pt}h3{font-size:14pt;color:#2b4c8c;border-bottom:1px solid #ccd;margin-top:18pt}h4{font-size:12pt}p.np b{color:#2b4c8c;margin-right:6px}</style></head><body><h1>'+esc(d.title)+'</h1>'+kbFmt(d.text).replace(/<\/?mark>/g,'')+'</body></html>';
+  if (fmt === 'word'){
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff'+html], {type:'application/msword'}));
+    a.download = d.title.replace(/[\/:*?"<>|]/g,' ').slice(0,80)+'.doc'; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); }, 1000); return;
+  }
+  var w = window.open('', '_blank'); if (!w){ toast('Браузер не дал открыть окно печати', true); return; }
+  w.document.write(html); w.document.close(); setTimeout(function(){ try { w.focus(); w.print(); } catch(e){} }, 400); // «Сохранить как PDF» в окне печати
+}
 function hl(t){ var e = esc(t); if (!KQ) return e; var q = esc(KQ).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); return e.replace(new RegExp(q,'gi'), function(m){ return '<mark>'+m+'</mark>'; }); }
 function snippet(t){ var i = t.toLowerCase().indexOf(KQ.toLowerCase()); if (i < 0) return esc(t.slice(0,160)); var a = Math.max(0, i-70); return (a?'…':'')+hl(t.slice(a, i+KQ.length+110))+'…'; }
 // База знаний по папкам (вкладки): регламенты менеджера, по продукту, другие, рабочие материалы — руководитель добавляет папки
@@ -1957,8 +1998,9 @@ function openKb(i){
   var d = S.kbl[i];
   openModal('<h2><span>'+esc(d.title)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
     '<div class="tags" style="margin:0 0 12px"><span class="tag gray">'+esc(d.section)+'</span>'+(d.updated?'<span class="tag gray">обновлён '+dmy(d.updated)+'</span>':'')+'</div>'+
-    (d.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(d.link)+'" target="_blank" rel="noopener">📎 Открыть файл</a>':'')+
-    (d.text?'<div class="kb-text">'+hl(d.text)+'</div>':'<div class="note">Текст не распознан — откройте файл.</div>')+
+    '<div class="kb-dl">'+(d.link?'<a class="btn ghost" href="'+esc(d.link)+'" target="_blank" rel="noopener">📎 Открыть</a>':'')+
+      (d.text||kbGid(d)?'<button class="btn sec" onclick="kbDl('+i+',\'pdf\')">⬇ PDF</button><button class="btn sec" onclick="kbDl('+i+',\'word\')">⬇ Word</button>':'')+'</div>'+
+    (d.text?kbFmt(d.text):'<div class="note">Текст не распознан — откройте файл.</div>')+
     (S.me.boss&&!d.lesson?'<label class="f" style="margin-top:12px">Папка<select onchange="moveKb(\''+d.id+'\', this.value)">'+kbFolders().map(function(f){ return '<option'+(f===d.section?' selected':'')+'>'+esc(f)+'</option>'; }).join('')+'</select></label>'+
       '<div class="acts"><button class="btn bad" onclick="delKb(\''+d.id+'\')">Удалить</button><button class="btn sec" onclick="editKb('+i+')">Изменить</button></div>':''));
 }
@@ -2022,7 +2064,7 @@ function openLesson(id){
     var read = S.learn.log.some(function(x){ return x.emp===S.me.name && x.type==='Урок' && x.id===id; });
     openModal('<h2><span>'+esc(l.title)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
       (l.link?'<a class="btn sec" style="display:block;text-align:center;text-decoration:none;margin-bottom:12px" href="'+esc(l.link)+'" target="_blank" rel="noopener">Открыть оригинал документа</a>':'')+
-      '<div class="kb-text">'+esc(l.text)+'</div>'+
+      kbFmt(l.text)+
       '<div class="acts"><button class="btn" '+(read?'disabled':'')+' onclick="lessonRead(\''+id+'\')">'+(read?'✓ Урок пройден':'Прочитал, урок пройден')+'</button></div>');
   };
   if (LS.lessons[id]) return show(LS.lessons[id]);
