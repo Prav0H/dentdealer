@@ -387,9 +387,9 @@ function sbOrdersStart(){
     }).on('postgres_changes', {event:'*', schema:'public', table:'bundles'}, function(p){
       if (p.new && p.new.emp_id) sbBundleRow({ver: p.new.ver, h: p.new.h}); // сам пакет берём отдельным запросом
     }).on('postgres_changes', {event:'*', schema:'public', table:'meta'}, function(p){
-      if (p.new && (p.new.key === 'price' || p.new.key === 'kb' || p.new.key === 'promos')) sbMetaLoad(p.new.key);
+      if (p.new && (p.new.key === 'price' || p.new.key === 'kb' || p.new.key === 'promos' || p.new.key === 'contract')) sbMetaLoad(p.new.key);
       else if (p.new && p.new.key === 'appver') appVerCheck(p.new.value && p.new.value.v);
-    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); sbMetaLoad('appver'); sbMetaLoad('promos'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
+    }).subscribe(function(st){ if (st === 'SUBSCRIBED'){ sbLoadOrders(); sbLoadBundle(); sbMetaLoad('price'); sbMetaLoad('kb'); sbMetaLoad('appver'); sbMetaLoad('promos'); sbMetaLoad('contract'); } }); // после (пере)подключения — всё заново, чтобы ничего не пропустить
   });
 }
 function sbStop(){
@@ -437,10 +437,11 @@ function sbMetaLoad(k){
     else if (k === 'kb' && v.docs){ S.kb = v; S.kbAll = v.docs; if (S.tab === 'kb') render(); }
     else if (k === 'appver') appVerCheck(v.v);
     else if (k === 'promos' && v.items) setPromos(v.items);
+    else if (k === 'contract') setContract(v);
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 52, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 53, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -649,7 +650,7 @@ function bg(fn){
 
 // ---------- данные ----------
 function key(){ return 'dd_data_' + (S.me ? S.me.name : '') + '_' + S.month; }
-var CFIELDS = ['addr','phone','comment','mgr','legal','clinic','region','email','lpr','buys','every','reg','alias'];
+var CFIELDS = ['addr','phone','comment','mgr','legal','clinic','region','email','lpr','buys','every','reg','alias','cat','req'];
 function norm(d){
   (d.clients||[]).forEach(function(c){ CFIELDS.forEach(function(k){ if (c[k]==null) c[k]=''; }); c.trade=!!c.trade; c.m=c.m||{}; });
   return d;
@@ -1514,6 +1515,103 @@ function mailSend(){
   });
 }
 
+// ---------- реквизиты клиента и договор ----------
+var OPF = ['ООО', 'ИП', 'АО', 'ПАО', 'ЗАО', 'ГБУЗ / бюджетное учреждение', 'Самозанятый', 'Физическое лицо', 'Другое'];
+var PAY = ['100% предоплата', 'Отсрочка платежа', 'Оплата по факту поставки', '50% предоплата, 50% по факту'];
+var DLV = ['Доставка курьером Поставщика', 'Самовывоз со склада Поставщика', 'Транспортная компания / СДЭК за счёт Покупателя', 'Транспортная компания / СДЭК за счёт Поставщика'];
+var REQF = [['opf','Организационно-правовая форма','sel',OPF], ['full','Полное наименование'], ['inn','ИНН'], ['kpp','КПП'], ['ogrn','ОГРН / ОГРНИП'],
+  ['jaddr','Юридический адрес'], ['paddr','Почтовый / фактический адрес'], ['bank','Банк'], ['bik','БИК'], ['rs','Расчётный счёт'], ['ks','Корр. счёт'],
+  ['sign','Подписант (ФИО)'], ['pos','Должность подписанта'], ['basis','Действует на основании (Устава, доверенности №…)'],
+  ['pay','Условия оплаты','sel',PAY], ['days','Отсрочка, дней'], ['dlv','Условия доставки','sel',DLV], ['cno','Номер договора'], ['cdate','Дата договора','date'], ['note','Особые условия']];
+function reqOf(c){ try { return typeof c.req === 'object' && c.req ? c.req : JSON.parse(c.req||'{}'); } catch(e){ return {}; } }
+function reqForm(c, pre){
+  var r = reqOf(c);
+  return REQF.map(function(f){ var id = pre+f[0], v = r[f[0]] || (f[0]==='full' ? (c.legal||'') : '');
+    if (f[2]==='sel') return '<label class="f">'+f[1]+'<select id="'+id+'"><option value="">—</option>'+f[3].map(function(o){ return '<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>'; }).join('')+(v&&f[3].indexOf(v)<0?'<option selected>'+esc(v)+'</option>':'')+'</select></label>';
+    if (f[2]==='date') return '<label class="f">'+f[1]+'<input type="date" id="'+id+'" value="'+esc(v)+'"></label>';
+    return '<label class="f">'+f[1]+(f[0]==='note'||/addr/.test(f[0])?'<textarea id="'+id+'">'+esc(v)+'</textarea>':'<input id="'+id+'" value="'+esc(v)+'"'+(/inn|kpp|ogrn|bik|rs|ks|days/.test(f[0])?' inputmode="numeric"':'')+'>')+'</label>'; }).join('');
+}
+function reqRead(pre){ var r = {}; REQF.forEach(function(f){ var el = $(pre+f[0]); if (el && el.value.trim()) r[f[0]] = el.value.trim(); }); return r; }
+function editReq(){
+  var c = CUR_CLIENT;
+  openModal('<h2><span>Реквизиты · '+esc(c.name)+'</span><button class="x" onclick="closeModal()">×</button></h2><div class="note" style="margin-top:0">Нужны для договора. Заполните, что есть — пустое в договоре останется пропуском.</div>'+
+    reqForm(c, 'q_')+'<div class="acts"><button class="btn ghost" onclick="openClient(S.clist.indexOf(CUR_CLIENT))">Назад</button><button class="btn" onclick="saveReq()">Сохранить</button></div>');
+}
+function saveReq(){
+  var c = CUR_CLIENT, r = reqRead('q_');
+  if (r.inn && !/^\d{10}(\d{2})?$/.test(r.inn)){ toast('ИНН — 10 или 12 цифр', true); return; }
+  if (r.bik && !/^\d{9}$/.test(r.bik)){ toast('БИК — 9 цифр', true); return; }
+  if (r.rs && !/^\d{20}$/.test(r.rs)){ toast('Расчётный счёт — 20 цифр', true); return; }
+  c.req = JSON.stringify(r);
+  var o = {orig: c.name, name: c.name, addr: c.addr, phone: c.phone, disc: (c.disc||0)*100, trade: !!c.trade, comment: c.comment, req: c.req};
+  ['legal','clinic','region','email','lpr','buys','every','reg','alias','cat'].forEach(function(k){ o[k] = c[k] || ''; });
+  toast('Реквизиты сохранены'); closeModal(); render();
+  api('saveClient', o).catch(function(){});
+}
+// шаблон договора: свой (загружен из Word) или стандартный
+S.contract = (function(){ try { return JSON.parse(store('dd_contract')||'null') || {}; } catch(e){ return {}; } })();
+function setContract(v){ S.contract = v || {}; try { store('dd_contract', JSON.stringify(S.contract)); } catch(e){} }
+var CT_DEFAULT = '<h1 style="text-align:center">ДОГОВОР ПОСТАВКИ № {{Номер}}</h1><p style="display:flex;justify-content:space-between"><span>г. Москва</span><span>{{Дата}}</span></p>'+
+ '<p>{{Поставщик.Наименование}}, именуемое в дальнейшем «Поставщик», в лице {{Поставщик.Должность}} {{Поставщик.Подписант}}, действующего на основании {{Поставщик.Основание}}, с одной стороны, и {{Покупатель.Наименование}}, именуемое в дальнейшем «Покупатель», в лице {{Покупатель.Должность}} {{Покупатель.Подписант}}, действующего на основании {{Покупатель.Основание}}, с другой стороны, заключили настоящий договор о нижеследующем.</p>'+
+ '<h3>1. Предмет договора</h3><p>1.1. Поставщик обязуется передавать в собственность Покупателя стоматологические материалы и изделия (далее — Товар), а Покупатель — принимать и оплачивать Товар. Наименование, количество и цена Товара указываются в счетах и товарных накладных, являющихся неотъемлемой частью договора.</p>'+
+ '<h3>2. Цена и порядок оплаты</h3><p>2.1. Цена Товара указывается в счёте Поставщика. Скидка Покупателя: {{Скидка}}.</p><p>2.2. Условия оплаты: {{Оплата}}.</p><p>2.3. Оплата производится в рублях РФ на расчётный счёт Поставщика.</p>'+
+ '<h3>3. Поставка</h3><p>3.1. Условия доставки: {{Доставка}}.</p><p>3.2. Право собственности и риск случайной гибели Товара переходят к Покупателю в момент передачи Товара.</p><p>3.3. Претензии по количеству и внешнему виду Товара принимаются при приёмке.</p>'+
+ '<h3>4. Ответственность сторон и споры</h3><p>4.1. За неисполнение обязательств стороны несут ответственность по законодательству РФ.</p><p>4.2. Споры решаются переговорами, а при недостижении согласия — в арбитражном суде по месту нахождения Поставщика.</p>'+
+ '<h3>5. Срок действия</h3><p>5.1. Договор вступает в силу с даты подписания и действует до 31 декабря текущего года; если ни одна сторона не заявит о прекращении за 30 дней — продлевается на каждый следующий год.</p>'+
+ '<p>{{Особые условия}}</p><h3>6. Реквизиты и подписи сторон</h3>{{Реквизиты сторон}}';
+function ctVal(c, r, our, no, dt){
+  var nm = function(x){ return [x.opf && !/Другое|Физ/.test(x.opf) && (x.full||'').indexOf(x.opf) < 0 ? x.opf : '', x.full].filter(Boolean).join(' '); };
+  var pay = r.pay ? r.pay + (r.pay==='Отсрочка платежа' && r.days ? ' '+r.days+' календарных дней с даты поставки' : '') : '';
+  var block = function(t, x){ return '<td style="vertical-align:top;width:50%;padding:6px"><b>'+t+'</b><br>'+esc(nm(x)||'')+'<br>ИНН '+esc(x.inn||'')+(x.kpp?' / КПП '+esc(x.kpp):'')+'<br>'+(x.ogrn?'ОГРН '+esc(x.ogrn)+'<br>':'')+'Адрес: '+esc(x.jaddr||'')+'<br>Р/с '+esc(x.rs||'')+'<br>'+esc(x.bank||'')+'<br>БИК '+esc(x.bik||'')+(x.ks?', к/с '+esc(x.ks):'')+'<br><br>'+esc(x.pos||'')+'<br><br>_____________ / '+esc(x.sign||'')+' /</td>'; };
+  return {'Номер': no, 'Дата': dt, 'Скидка': c.disc ? Math.round(c.disc*1000)/10+'%' : 'не предусмотрена', 'Оплата': pay || '________', 'Доставка': r.dlv || '________',
+    'Особые условия': r.note ? 'Особые условия: '+r.note : '',
+    'Покупатель.Наименование': nm(r) || c.legal || c.name, 'Покупатель.Подписант': r.sign||'________', 'Покупатель.Должность': r.pos||'________', 'Покупатель.Основание': r.basis||'Устава',
+    'Поставщик.Наименование': nm(our) || 'Dent Dealer', 'Поставщик.Подписант': our.sign||'________', 'Поставщик.Должность': our.pos||'________', 'Поставщик.Основание': our.basis||'Устава',
+    'ИНН': r.inn||'', 'КПП': r.kpp||'', 'ОГРН': r.ogrn||'', 'Адрес': r.jaddr||'', 'Банк': r.bank||'', 'БИК': r.bik||'', 'Счёт': r.rs||'', 'Корр. счёт': r.ks||'', 'Почта': mailOf(c), 'Телефон': c.phone||'',
+    'Реквизиты сторон': '<table style="width:100%;border-collapse:collapse"><tr>'+block('ПОСТАВЩИК', our)+block('ПОКУПАТЕЛЬ', r)+'</tr></table>'};
+}
+function ctHtml(c, no, dt){
+  var r = reqOf(c), our = S.contract.our || {}, v = ctVal(c, r, our, no, dt), tpl = S.contract.html || CT_DEFAULT;
+  return tpl.replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(m, k){ return k in v ? (k==='Реквизиты сторон' ? v[k] : esc(v[k])) : m; });
+}
+function contractForm(){
+  var c = CUR_CLIENT, r = reqOf(c), t = S.contract || {};
+  var miss = ['inn','full','sign','jaddr'].filter(function(k){ return !r[k]; });
+  openModal('<h2><span>Договор · '+esc(c.name)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    (miss.length?'<div class="note" style="color:var(--warn);margin-top:0">Не заполнены реквизиты: '+miss.map(function(k){ return REQF.filter(function(f){ return f[0]===k; })[0][1]; }).join(', ')+' — <a href="#" onclick="editReq();return false">заполнить</a></div>':'')+
+    '<div class="row2"><label class="f">Номер договора<input id="ct_no" value="'+esc(r.cno || ('ДД-'+S.today.replace(/-/g,'').slice(2)+'-'+(Math.floor(Math.random()*90)+10)))+'"></label><label class="f">Дата<input type="date" id="ct_dt" value="'+esc(r.cdate||S.today)+'"></label></div>'+
+    '<div class="note">Шаблон: '+(t.html ? '<b>'+esc(t.name||'загруженный')+'</b>'+(t.at?' от '+dmy(t.at):'') : 'стандартный договор поставки (свой можно загрузить из Word)')+'</div>'+
+    '<div class="kb-dl" style="margin-top:10px"><button class="btn" onclick="ctMake(\'word\')">⬇ Word</button><button class="btn sec" onclick="ctMake(\'pdf\')">⬇ PDF</button><button class="btn ghost" onclick="ctMake(\'view\')">👁 Просмотр</button></div>'+
+    (S.me.boss?'<div class="sec-t">Для руководителя</div><div class="acts" style="margin-top:0;flex-wrap:wrap"><button class="btn ghost sm" onclick="ctUpload()">Загрузить шаблон (.docx)</button><button class="btn ghost sm" onclick="ourReq()">Наши реквизиты</button>'+(t.html?'<button class="btn ghost sm" onclick="ctReset()">Вернуть стандартный</button>':'')+'</div>'+
+      '<div class="note">В своём шаблоне вместо данных напишите метки в двойных фигурных скобках: {{Номер}}, {{Дата}}, {{Покупатель.Наименование}}, {{Покупатель.Подписант}}, {{Покупатель.Должность}}, {{Покупатель.Основание}}, {{ИНН}}, {{КПП}}, {{ОГРН}}, {{Адрес}}, {{Банк}}, {{БИК}}, {{Счёт}}, {{Корр. счёт}}, {{Оплата}}, {{Доставка}}, {{Скидка}}, {{Особые условия}}, {{Поставщик.Наименование}}, {{Поставщик.Подписант}}, {{Реквизиты сторон}}.</div>':''));
+}
+function ctMake(kind){
+  var c = CUR_CLIENT, no = $('ct_no').value.trim(), dt = $('ct_dt').value, body = ctHtml(c, no, dt ? dmy(dt) : '');
+  var html = '<html><head><meta charset="utf-8"><title>Договор '+esc(no)+'</title><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.4;margin:20mm}h1{font-size:14pt}h3{font-size:12pt;margin:14pt 0 6pt}p{margin:0 0 6pt;text-align:justify}td{font-size:11pt}</style></head><body>'+body+'</body></html>';
+  if (kind === 'word'){ var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff'+html], {type:'application/msword'})); a.download = ('Договор '+no+' '+c.name).replace(/[\\/:*?"<>|]/g,' ').slice(0,90)+'.doc'; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); }, 1000); return; }
+  var w = window.open('', '_blank'); if (!w){ toast('Браузер не дал открыть окно', true); return; }
+  w.document.write(html); w.document.close(); if (kind === 'pdf') setTimeout(function(){ try { w.focus(); w.print(); } catch(e){} }, 400);
+}
+function ctUpload(){
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.docx';
+  inp.onchange = function(){
+    var f = inp.files[0]; if (!f) return; toast('Читаю шаблон…');
+    var go = function(){ f.arrayBuffer().then(function(buf){ return window.mammoth.convertToHtml({arrayBuffer: buf}); }).then(function(res){
+      var html = res.value; if (!/\{\{/.test(html)) toast('В шаблоне нет меток {{…}} — данные клиента не подставятся', true);
+      api('saveContractTpl', {html: html, name: f.name}).then(function(v){ setContract(v); toast('Шаблон загружен'); contractForm(); }).catch(function(){});
+    }).catch(function(){ toast('Не удалось прочитать файл — нужен .docx', true); }); };
+    if (window.mammoth) go(); else { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'; s.onload = go; s.onerror = function(){ toast('Не загрузился модуль чтения Word', true); }; document.head.appendChild(s); }
+  };
+  inp.click();
+}
+function ctReset(){ confirmBox('Вернуть стандартный шаблон договора?', function(){ api('saveContractTpl', {reset: true}).then(function(v){ setContract(v); contractForm(); }).catch(function(){}); }); }
+function ourReq(){
+  var our = S.contract.our || {};
+  openModal('<h2><span>Наши реквизиты (Поставщик)</span><button class="x" onclick="closeModal()">×</button></h2>'+reqForm({req: our}, 'u_').replace(/<label class="f">(Условия оплаты|Отсрочка, дней|Условия доставки|Номер договора|Дата договора|Особые условия)[\s\S]*?<\/label>/g, '')+
+    '<div class="acts"><button class="btn ghost" onclick="contractForm()">Назад</button><button class="btn" onclick="saveOur()">Сохранить</button></div>');
+}
+function saveOur(){ var r = reqRead('u_'); api('saveContractTpl', {our: r}).then(function(v){ setContract(v); toast('Реквизиты сохранены'); contractForm(); }).catch(function(){}); }
+
 // ---------- зарплата ----------
 function vSalary(){
   var n = cur() || S.me.name, v=$('view');
@@ -1928,7 +2026,7 @@ function openClient(i){
     '<div class="acts" style="margin-top:10px;flex-wrap:wrap">'+callButtons(c.phone+'\n'+c.addr)+routeButton(c.addr)+'</div>'+
     '<div class="tags">'+(c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'<span class="tag gray">без скидки</span>')+(c.trade?'<span class="tag vio">торгующая</span>':'')+(c.mgr?'<span class="tag gray">менеджер '+esc(c.mgr)+'</span>':'')+'</div>'+
     (c.comment?'<div class="note" style="white-space:pre-line">'+esc(c.comment)+'</div>':'')+'</div>'+clientInfo(c)+clientMonths(c)+
-    '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
+    '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn sec" onclick="editReq()">📄 Реквизиты</button><button class="btn sec" onclick="contractForm()">📝 Договор</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
     '<div id="c_note"></div><div class="sec-t">История</div><div id="c_hist"><div class="empty">Загрузка…</div></div>');
   var drawHist = function(h){
     if (CUR_CLIENT !== c || !$('c_hist')) return;
