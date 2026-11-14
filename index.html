@@ -13,9 +13,6 @@
 <link rel="icon" href="icon-192.png">
 <script>var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});</script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 // Быстрое хранилище (Firebase): открытые настройки проекта — это адрес, а не пароль.
@@ -428,7 +425,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 48, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 49, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1724,7 +1721,34 @@ function dueCall(c){
 // «Скоро закажет»: до ожидаемого заказа 7 дней или меньше — хорошее время напомнить о себе.
 function soonCall(c){ var n = nextOrder(c); return n && !dueCall(c) && n <= addDays(S.today, 7); }
 function daysLate(c){ var n = nextOrder(c); return n ? Math.round((Date.parse(S.today) - Date.parse(n))/864e5) : -9999; }
-var CF = 'all', CS = 'last';
+var CF = 'all', CS = 'last', CFL = {miss: [], from: '', to: '', cats: []};
+var CATS = ['Частник', 'Клиника', 'Торгующая', 'Прочее'];
+// Что есть в карточке: телефон (в поле или в адресе), почта, адрес.
+function hasPhone(c){ return /\d[\d\s()+-]{8,}/.test((c.phone||'')+' '+(c.addr||'')); }
+function hasMail(c){ return /\S+@\S+/.test((c.email||'')+' '+(c.addr||'')); }
+function hasAddr(c){ var a = String(c.addr||'').replace(/\+?\d[\d\s()+-]{8,}/g,'').replace(/\S+@\S+/g,'').trim(); return /[а-яa-z]{3}/i.test(a) && !/^самовывоз$/i.test(a); }
+var MISS = [['phone','без телефона', function(c){ return !hasPhone(c); }], ['mail','без почты', function(c){ return !hasMail(c); }],
+  ['addr','без адреса', function(c){ return !hasAddr(c); }], ['none','без всего (ни телефона, ни почты, ни адреса)', function(c){ return !hasPhone(c) && !hasMail(c) && !hasAddr(c); }]];
+function catOf(c){ return c.cat || (c.trade ? 'Торгующая' : ''); }
+function monthsAgo(c){ return c.last ? (Date.parse(S.today) - Date.parse(c.last)) / (30.44*864e5) : Infinity; }
+function freqOf(c){ return c.iv ? 30/c.iv : 0; } // заказов в месяц по ритму
+function cfCount(){ return CFL.miss.length + CFL.cats.length + (CFL.from!==''||CFL.to!=='' ? 1 : 0); }
+function cfPass(c){
+  if (CFL.miss.length && !MISS.some(function(m){ return CFL.miss.indexOf(m[0])>=0 && m[2](c); })) return false; // любое из отмеченных
+  if (CFL.cats.length && CFL.cats.indexOf(catOf(c) || 'Без категории')<0) return false;
+  if (CFL.from!=='' || CFL.to!==''){ var a = monthsAgo(c); if (CFL.from!=='' && a < +CFL.from) return false; if (CFL.to!=='' && a > +CFL.to) return false; }
+  return true;
+}
+function cfToggle(k, v, on){ var a = CFL[k], i = a.indexOf(v); if (on && i<0) a.push(v); if (!on && i>=0) a.splice(i,1); S.cfOpen = true; render(); }
+function cfPanel(){
+  var box = function(k, v, t){ return '<label class="chk" style="margin:2px 0"><input type="checkbox"'+(CFL[k].indexOf(v)>=0?' checked':'')+' onchange="cfToggle(\''+k+'\',\''+v+'\',this.checked)"> '+t+'</label>'; };
+  var n = cfCount();
+  return '<details class="card" style="margin:0 2px 8px;padding:8px 12px"'+(S.cfOpen?' open':'')+' ontoggle="S.cfOpen=this.open"><summary style="cursor:pointer;font-weight:600">Фильтры'+(n?' · выбрано '+n:'')+'</summary>'+
+    '<div class="row2" style="margin-top:8px"><div><div class="note" style="margin:0 0 4px">Нет данных (любое из отмеченного)</div>'+MISS.map(function(m){ return box('miss', m[0], m[1]); }).join('')+'</div>'+
+    '<div><div class="note" style="margin:0 0 4px">Категория</div>'+CATS.concat(['Без категории']).map(function(c){ return box('cats', c, c); }).join('')+'</div></div>'+
+    '<div class="note" style="margin:8px 0 4px">Не заказывал (месяцев с последнего заказа)</div><div style="display:flex;gap:8px;align-items:center">от <input style="width:70px" inputmode="decimal" value="'+esc(CFL.from)+'" onchange="CFL.from=this.value.trim();S.cfOpen=true;render()"> до <input style="width:70px" inputmode="decimal" value="'+esc(CFL.to)+'" onchange="CFL.to=this.value.trim();S.cfOpen=true;render()"> мес.</div>'+
+    (n?'<div class="acts" style="margin-top:8px"><button class="btn ghost" onclick="CFL={miss:[],from:\'\',to:\'\',cats:[]};render()">Сбросить фильтры</button></div>':'')+'</details>';
+}
 function vClients(){
   var v = $('view'), keep = document.activeElement && document.activeElement.id==='cq';
   var mine = ocur() || null, y = S.today.slice(0,4);
@@ -1734,11 +1758,19 @@ function vClients(){
   });
   if (CF==='none') CF = 'all';
   if (CF==='soon') CF = 'all';
+  base = base.filter(cfPass);
   var due = base.filter(dueCall);
   var list = (CF==='due' ? due : base).slice().sort(function(a,b){
     if (CF==='due') return daysLate(b) - daysLate(a);
     if (CS==='sum') return yearSum(b) - yearSum(a) || b.sum - a.sum;
     if (CS==='az') return a.name.localeCompare(b.name, 'ru');
+    if (CS==='old') return (a.last||'0') < (b.last||'0') ? -1 : (a.last||'0') > (b.last||'0') ? 1 : 0;
+    if (CS==='freq') return freqOf(b) - freqOf(a) || b.n - a.n;
+    if (CS==='rare') return freqOf(a) - freqOf(b) || a.n - b.n;
+    if (CS==='n') return b.n - a.n; if (CS==='n1') return a.n - b.n;
+    if (CS==='all') return b.sum - a.sum; if (CS==='all1') return a.sum - b.sum;
+    if (CS==='avg') return (b.n ? b.sum/b.n : 0) - (a.n ? a.sum/a.n : 0);
+    if (CS==='reg') return (b.reg||'') < (a.reg||'') ? -1 : (b.reg||'') > (a.reg||'') ? 1 : 0;
     return (b.last||'') < (a.last||'') ? -1 : (b.last||'') > (a.last||'') ? 1 : b.n - a.n;
   });
   S.clist = list.slice(0, 200);
@@ -1746,8 +1778,9 @@ function vClients(){
   v.innerHTML = '<div class="bar"><input id="cq" placeholder="Поиск: название, юр. название, ЛПР, телефон" value="'+esc(CQ)+'"><button class="btn" onclick="editClient()">+ Клиент</button></div>'+
     '<div class="seg">'+chip('all','Все · '+base.length)+chip('due','🔔 Пора звонить · '+due.length)+'</div>'+
     (CF==='due'?'<div class="note" style="margin:0 2px 8px">Считаем по интервалу закупок из карточки, а если его нет — по тому, как часто клиент заказывал раньше (📈). Если последний заказ был меньше месяца назад, клиент сюда не попадает.</div>':'')+
-    '<div class="bar" style="margin:0 2px 8px"><span class="note" style="margin:0;flex:1">'+(CQ?'Найдено: '+list.length:(mine?'Ваши клиенты: ':'Клиентов: ')+list.length)+'</span>'+
-    '<select style="width:auto" onchange="CS=this.value;render()">'+[['last','Недавние заказы'],['sum','Сумма за '+y],['az','По алфавиту']].map(function(o){ return '<option value="'+o[0]+'"'+(CS===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
+    cfPanel()+'<div class="bar" style="margin:0 2px 8px"><span class="note" style="margin:0;flex:1">'+(CQ?'Найдено: '+list.length:(mine?'Ваши клиенты: ':'Клиентов: ')+list.length)+'</span>'+
+    '<select style="width:auto" onchange="CS=this.value;render()">'+[['last','Недавно заказывали'],['old','Давно не заказывали'],['freq','Чаще заказывают'],['rare','Реже заказывают'],['n','Больше заказов'],['n1','Меньше заказов'],
+      ['all','Сумма за всё время ↓'],['all1','Сумма за всё время ↑'],['sum','Сумма за '+y],['avg','Средний чек'],['reg','Новые клиенты'],['az','По алфавиту']].map(function(o){ return '<option value="'+o[0]+'"'+(CS===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
     '<div class="list">'+S.clist.map(function(c,i){
       var ys = yearSum(c);
       return '<div class="item" onclick="openClient('+i+')"><div class="t"><b>'+esc(c.name)+'</b>'+(ys?'<span>'+money(ys)+'</span>':'')+'</div>'+
@@ -1755,7 +1788,7 @@ function vClients(){
         (dueCall(c)?'<span class="tag warn">🔔 пора звонить'+(daysLate(c)>0?' · ждали '+dmy(nextOrder(c)).slice(0,5):'')+'</span>':'')+
         (c.n?'<span class="tag gray">заказов '+c.n+'</span>':'')+(c.last?'<span class="tag gray">последний '+dmy(c.last)+'</span>':'<span class="tag gray">заказов не было</span>')+
         (c.every?'<span class="tag gray">берёт раз в '+esc(c.every)+'</span>':c.iv?'<span class="tag gray">📈 обычно раз в '+c.iv+' дн.</span>':'')+
-        (c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'')+(c.trade?'<span class="tag vio">торгующая</span>':'')+
+        (c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'')+(catOf(c)?'<span class="tag vio">'+esc(catOf(c).toLowerCase())+'</span>':'')+
         (S.me.boss&&c.mgr?'<span class="tag gray">'+esc(c.mgr)+'</span>':'')+'</div></div>';
     }).join('')+'</div>'+(list.length>200?'<div class="note">Показаны первые 200 — уточните поиск.</div>':'');
   var t; $('cq').oninput = function(){ clearTimeout(t); t = setTimeout(function(){ CQ = $('cq').value.trim(); render(); }, 300); };
@@ -1784,7 +1817,7 @@ function openClient(i){
 }
 // Сведения о клиенте (юр. название, ЛПР, что покупает и т. д.) — только заполненные.
 function clientInfo(c){
-  var f = [['Юр. название', c.legal], ['Клиника', c.clinic], ['Регион', c.region], ['ЛПР / контакт', c.lpr],
+  var f = [['Категория', catOf(c)], ['Юр. название', c.legal], ['Клиника', c.clinic], ['Регион', c.region], ['ЛПР / контакт', c.lpr],
     ['Почта', c.email && '<a href="mailto:'+esc(c.email.split(/[;,\s]+/)[0])+'">'+esc(c.email)+'</a>'], ['Что покупает', c.buys],
     ['Интервал закупок', c.every && esc(c.every)], ['Ритм заказов', rhythmText(c)], ['Дата регистрации', c.reg && dmy(c.reg)],
     ['Другие названия', c.alias]].filter(function(x){ return x[1]; });
@@ -1830,6 +1863,7 @@ function editClient(c){
     '<label class="f">Телефоны — каждый с новой строки, можно с именем (Руслан +7 925 530-32-37)<textarea id="c_phone" style="min-height:80px">'+esc(c.phone)+'</textarea></label>'+
     '<label class="f">Обычная скидка, %<input id="c_disc" inputmode="decimal" value="'+(c.disc?Math.round(c.disc*1000)/10:'')+'"></label>'+
     '<label class="chk"><input type="checkbox" id="c_trade"'+(c.trade?' checked':'')+'> Торгующая компания</label>'+
+    '<label class="f">Категория<select id="c_cat"><option value="">—</option>'+CATS.map(function(x){ return '<option'+(catOf(c)===x?' selected':'')+'>'+x+'</option>'; }).join('')+'</select></label>'+
     '<label class="f">Комментарий<textarea id="c_comment">'+esc(c.comment)+'</textarea></label>'+
     '<div class="row2">'+fld('c_legal','Юр. название',c.legal)+fld('c_clinic','Клиника',c.clinic)+'</div>'+
     '<div class="row2">'+fld('c_region','Регион',c.region)+fld('c_email','Почта',c.email)+'</div>'+
@@ -1841,10 +1875,10 @@ function editClient(c){
 function saveClient(orig){
   var c = {orig: orig ? orig.name : '', name:$('c_name').value.trim(), addr:$('c_addr').value.trim(), phone:$('c_phone').value.trim(),
     disc:num($('c_disc').value), trade:$('c_trade').checked, comment:$('c_comment').value.trim()};
-  ['legal','clinic','region','email','lpr','buys','every','reg','alias'].forEach(function(k){ c[k] = $('c_'+k).value.trim(); });
+  ['legal','clinic','region','email','lpr','buys','every','reg','alias','cat'].forEach(function(k){ c[k] = $('c_'+k).value.trim(); });
   if (!c.name){ toast('Укажите название', true); return; }
   var shown = {name:c.name, addr:c.addr, phone:c.phone, disc:c.disc/100, trade:c.trade, comment:c.comment,
-    legal:c.legal, clinic:c.clinic, region:c.region, email:c.email, lpr:c.lpr, buys:c.buys, every:c.every, reg:c.reg, alias:c.alias};
+    legal:c.legal, clinic:c.clinic, region:c.region, email:c.email, lpr:c.lpr, buys:c.buys, every:c.every, reg:c.reg, alias:c.alias, cat:c.cat};
   if (orig) Object.keys(shown).forEach(function(k){ orig[k] = shown[k]; });
   else (S.data.clients = S.data.clients||[]).unshift(Object.assign(shown, {mgr:S.me.name, n:0, sum:0, last:'', m:{}}));
   closeModal(); render(); toast('Клиент сохранён');
