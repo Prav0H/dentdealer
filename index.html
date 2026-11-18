@@ -447,7 +447,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 57, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 58, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1268,7 +1268,7 @@ function cabList(){
       var st = r.status === 'new' ? '<span class="tag warn">ждёт</span>' : r.status === 'done' ? '<span class="tag ok">оформлена · '+esc(fio(r.done_by))+'</span>' : '<span class="tag bad">отклонена · '+esc(fio(r.done_by))+'</span>';
       return '<div class="card"><div class="t"><b>'+esc(r.client)+'</b><span>'+money(r.sum)+'</span></div><div class="note">№'+r.id+' · '+dmy(String(r.created_at).slice(0,10))+' · менеджер '+esc(fio(r.mgr))+'</div>'+
         '<div>'+(r.items||[]).map(function(i){ return esc(i.art)+' — '+i.qty+' '+i.unit+' <small style="color:var(--mute)">по '+money(i.price)+'</small>'; }).join('<br>')+'</div>'+
-        (r.comment ? '<div class="note">Комментарий клиента: '+esc(r.comment)+'</div>' : '')+(r.note ? '<div class="note">Ответ: '+esc(r.note)+'</div>' : '')+'<div class="tags">'+st+'</div>'+
+        (r.addr ? '<div class="note">Адрес: '+esc(r.addr)+'</div>' : '')+(r.comment ? '<div class="note">Комментарий клиента: '+esc(r.comment)+'</div>' : '')+(r.note ? '<div class="note">Ответ: '+esc(r.note)+'</div>' : '')+'<div class="tags">'+st+'</div>'+
         (r.status === 'new' && S.me.edit ? '<div class="acts"><button class="btn ghost" onclick="cabReject('+r.id+',this)">Отклонить</button><button class="btn" onclick="cabMake('+r.id+')">Оформить заказ</button></div>' : '')+'</div>';
     }).join('') : '<div class="card empty">Заявок нет</div>'));
 }
@@ -1298,6 +1298,7 @@ function cabMake(id){
     if (p){ promoApply(nl); cabArt(nl); }
     F.lines.push(nl);
   });
+  if (r.addr && $('f_addr')) $('f_addr').value = r.addr;
   if ($('f_comment')) $('f_comment').value = 'Из кабинета клиента, заявка №'+id+(r.comment ? ': '+r.comment : '');
   drawLines();
   toast('Проверьте заказ и нажмите «Сохранить»');
