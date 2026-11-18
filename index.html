@@ -380,6 +380,9 @@ function sbOrdersStart(){
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBTASK[p.old.id]; }
       else if (p.new && p.new.id) SBTASK[p.new.id] = p.new.o;
       sbApplySoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'cab_orders'}, function(p){
+      if (p.eventType === 'INSERT' && p.new) toast('🛒 Новая заявка из кабинета: '+p.new.client);
+      cabLoad();
     }).on('postgres_changes', {event:'*', schema:'public', table:'shipments'}, function(p){
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) SHIP = SHIP.filter(function(x){ return x.id !== p.old.id; }); } else shipPut(p.new);
       shipRedraw();
@@ -410,7 +413,7 @@ function sbLoadOrders(){
     });
   };
   return Promise.all([page(0), c.from('tasks').select('id,o'), c.from('emp_stats').select('emp,month,ver,v')]).then(function(r){
-    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad();
+    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad(); cabLoad();
     if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
     if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
     sbApply();
@@ -444,7 +447,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 55, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 56, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -865,6 +868,7 @@ function vOrders(){
   v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск по всем месяцам: клиент, артикул, счёт" value="'+esc(Q)+'">'+(S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+(courier()||S.me.boss?'<button class="btn sec" onclick="routeSheet()">🗺 Маршрут</button>':'')+'</div><div id="ochips">'+chips+'</div><div id="ost"></div><div class="list" id="olist"></div>';
   var t; $('q').oninput=function(){ clearTimeout(t); t=setTimeout(function(){ Q=$('q').value.trim(); refreshList(); },400); };
   if (keepFocus){ var q=$('q'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+  v.insertAdjacentHTML('afterbegin', '<div id="cabbar"></div>'); cabBar(); // заявки из кабинета клиентов
   drawOrders();
 }
 function refreshList(){
@@ -1169,6 +1173,146 @@ function delivered(k){
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
 function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Пустые'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
 function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
+// ---------- личный кабинет клиента ----------
+// Ссылку клиенту выдаёт менеджер (карточка клиента → «🔗 Кабинет»). Заявки из кабинета приходят сюда, менеджер оформляет их в заказ.
+var CAB_URL = 'https://prav0h.github.io/dentdealer/cabinet.html';
+var CABD = {}, CABO = [], CABKB = [];
+function cabLoad(){
+  var c = sbClient(); if (!c) return;
+  c.from('cab_disc').select('*').then(function(r){ if (!r.error){ CABD = {}; (r.data||[]).forEach(function(x){ CABD[x.client] = x; }); } }, function(){});
+  c.from('cab_kb').select('folder').then(function(r){ if (!r.error) CABKB = (r.data||[]).map(function(x){ return x.folder; }); }, function(){});
+  c.from('cab_orders').select('*').order('id', {ascending: false}).limit(300).then(function(r){ if (!r.error){ CABO = r.data || []; cabBar(); } }, function(){});
+}
+function cabErr(e){ var m = String(e && e.message || e || ''); toast(/fetch|network/i.test(m) ? 'Нет связи с базой' : m, true); }
+// персональная скидка клиента (доля): своя из кабинета, иначе — из карточки
+function cabFrac(name, cardFrac){ var d = CABD[name]; return d && d.pct ? d.pct/100 : (cardFrac||0); }
+function cabArt(l){ var d = CABD[$('f_client') ? $('f_client').value.trim() : '']; var p = d && d.arts && d.arts[l.art]; if (p && !l.ld && !l.promo) l.ld = +p; }
+
+// личная ссылка: показать, скопировать, отправить
+function cabLink(reset){
+  var c = CUR_CLIENT, sb = sbClient(); if (!c) return;
+  if (!sb || !S.sbOn){ toast('Нет связи с базой — попробуйте через минуту', true); return; }
+  sb.rpc('cab_link_make', {p_client: c.name, p_reset: !!reset}).then(function(r){
+    if (r.error){ cabErr(r.error); return; }
+    var url = CAB_URL + '?t=' + r.data, tel = String(c.phone||'').replace(/\D/g, '').replace(/^8(\d{10})$/, '7$1');
+    var txt = 'Здравствуйте! Ваш личный кабинет Dent Dealer: заказы, статусы, прайс с вашей скидкой и акции. Откройте ссылку (можно добавить на экран «Домой»): ' + url;
+    var mail = String(c.email||'').split(/[;,\s]+/)[0];
+    openModal('<h2><span>Кабинет клиента</span><button class="x" onclick="closeModal()">×</button></h2>'+
+      '<div class="note" style="margin-top:0">Личная ссылка для <b>'+esc(c.name)+'</b>. По ней клиент входит без пароля — отправляйте только самому клиенту.</div>'+
+      '<input id="cab_url" readonly value="'+esc(url)+'" onclick="this.select()">'+
+      '<div class="acts" style="flex-wrap:wrap"><button class="btn" onclick="cabCopy()">📋 Скопировать</button>'+
+      (tel.length >= 10 ? '<a class="btn sec" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/'+tel+'?text='+encodeURIComponent(txt)+'">WhatsApp</a>' : '')+
+      '<a class="btn sec" style="text-decoration:none" target="_blank" rel="noopener" href="https://t.me/share/url?url='+encodeURIComponent(url)+'&text='+encodeURIComponent('Ваш личный кабинет Dent Dealer')+'">Telegram</a>'+
+      (mail ? '<a class="btn sec" style="text-decoration:none" href="mailto:'+esc(mail)+'?subject='+encodeURIComponent('Личный кабинет Dent Dealer')+'&body='+encodeURIComponent(txt)+'">Письмо</a>' : '')+'</div>'+
+      '<div class="note">Ссылок может быть несколько (например, у двух сотрудников клиники) — все работают. Если ссылка попала не туда:</div>'+
+      '<button class="btn ghost sm" onclick="cabLinkReset(this)">Закрыть все старые ссылки и сделать новую</button>');
+    window.CAB_TXT = txt;
+  }, cabErr);
+}
+function cabCopy(){
+  var i = $('cab_url'); i.select();
+  var done = function(){ toast('Ссылка скопирована'); };
+  if (navigator.clipboard) navigator.clipboard.writeText(i.value).then(done, function(){ try { document.execCommand('copy'); done(); } catch(e){} });
+  else { try { document.execCommand('copy'); done(); } catch(e){} }
+}
+function cabLinkReset(b){ if (!b.dataset.sure){ b.dataset.sure = 1; b.textContent = 'Точно? Старые ссылки клиента перестанут работать'; b.className = 'btn bad sm'; return; } cabLink(true); }
+
+// персональная скидка: на всё и на отдельные артикулы
+function cabDisc(){
+  var c = CUR_CLIENT; if (!c) return;
+  var d = CABD[c.name] || {pct: 0, arts: {}};
+  var arts = Object.keys(d.arts||{}).map(function(a){ return a+' — '+d.arts[a]; }).join('\n');
+  openModal('<h2><span>Персональная скидка</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<div class="note" style="margin-top:0"><b>'+esc(c.name)+'</b>. Скидка действует в кабинете клиента (цены каталога уже с ней) и подставляется, когда вы оформляете заказ этому клиенту.'+
+    (c.disc ? ' Если не задать — берётся скидка из карточки: '+pct(c.disc)+'.' : '')+'</div>'+
+    '<label class="f">Скидка на всё, %<input id="cd_pct" inputmode="decimal" value="'+(d.pct||'')+'" placeholder="'+(c.disc ? Math.round(c.disc*1000)/10 : '0')+'"></label>'+
+    '<label class="f">На отдельные товары — по строке «артикул — %»<textarea id="cd_arts" placeholder="9003 — 15&#10;BG-B05 — 10">'+esc(arts)+'</textarea></label><div id="cd_chk" class="note"></div>'+
+    (d.by_name ? '<div class="note">Изменил(а): '+esc(fio(d.by_name))+', '+dmy(String(d.updated_at||'').slice(0,10))+'</div>' : '')+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" onclick="cabDiscSave()">Сохранить</button></div>');
+  var chk = function(){ var bad = cabArts().bad; $('cd_chk').textContent = bad.length ? 'Нет в прайсе: '+bad.join(', ') : ''; };
+  $('cd_arts').oninput = chk; chk();
+}
+function cabArts(){
+  var out = {}, bad = [];
+  String($('cd_arts').value||'').split('\n').forEach(function(s){
+    var m = s.trim().match(/^(.+?)\s*[—\-–:=]\s*(\d+(?:[.,]\d+)?)\s*%?$/); if (!m) return;
+    var p = S.price.filter(function(x){ return x.art.toLowerCase() === m[1].trim().toLowerCase(); })[0];
+    if (p) out[p.art] = num(m[2]); else bad.push(m[1].trim());
+  });
+  return {arts: out, bad: bad};
+}
+function cabDiscSave(){
+  var c = CUR_CLIENT, sb = sbClient(), a = cabArts(), p = num($('cd_pct').value);
+  if (!sb){ toast('Нет связи с базой', true); return; }
+  if (p < 0 || p > 90){ toast('Скидка — от 0 до 90 %', true); return; }
+  sb.rpc('cab_disc_set', {p_client: c.name, p_pct: p, p_arts: a.arts}).then(function(r){
+    if (r.error){ cabErr(r.error); return; }
+    CABD[c.name] = {client: c.name, pct: p, arts: a.arts, by_name: S.me.name, updated_at: new Date().toISOString()};
+    toast('Персональная скидка сохранена'); closeModal();
+  }, cabErr);
+}
+function cabDiscTag(c){ var d = CABD[c.name]; return d && (d.pct || Object.keys(d.arts||{}).length) ? '<span class="tag ok">персональная '+(d.pct ? d.pct+'%' : '')+(Object.keys(d.arts||{}).length ? ' + на '+Object.keys(d.arts).length+' тов.' : '')+'</span>' : ''; }
+
+// заявки клиентов — полоса над списком заказов
+function cabNew(){ return CABO.filter(function(r){ return r.status === 'new'; }); }
+function cabBar(){
+  var b = $('cabbar'); if (!b) return;
+  var n = cabNew();
+  b.innerHTML = n.length ? '<div class="card" style="display:flex;gap:10px;align-items:center;background:var(--warn-soft);border-color:transparent"><span style="flex:1">🛒 <b>Заявки из кабинета клиентов: '+n.length+'</b><br><small>'+
+    esc(n.slice(0,3).map(function(r){ return r.client; }).join(', '))+(n.length>3?'…':'')+'</small></span><button class="btn" onclick="cabList()">Открыть</button></div>' : '';
+}
+function cabList(){
+  var list = CABO.filter(function(r){ return r.status === 'new' || Date.now() - Date.parse(r.created_at) < 7*864e5; });
+  openModal('<h2><span>Заявки клиентов</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    (list.length ? list.map(function(r){
+      var st = r.status === 'new' ? '<span class="tag warn">ждёт</span>' : r.status === 'done' ? '<span class="tag ok">оформлена · '+esc(fio(r.done_by))+'</span>' : '<span class="tag bad">отклонена · '+esc(fio(r.done_by))+'</span>';
+      return '<div class="card"><div class="t"><b>'+esc(r.client)+'</b><span>'+money(r.sum)+'</span></div><div class="note">№'+r.id+' · '+dmy(String(r.created_at).slice(0,10))+' · менеджер '+esc(fio(r.mgr))+'</div>'+
+        '<div>'+(r.items||[]).map(function(i){ return esc(i.art)+' — '+i.qty+' '+i.unit+' <small style="color:var(--mute)">по '+money(i.price)+'</small>'; }).join('<br>')+'</div>'+
+        (r.comment ? '<div class="note">Комментарий клиента: '+esc(r.comment)+'</div>' : '')+(r.note ? '<div class="note">Ответ: '+esc(r.note)+'</div>' : '')+'<div class="tags">'+st+'</div>'+
+        (r.status === 'new' && S.me.edit ? '<div class="acts"><button class="btn ghost" onclick="cabReject('+r.id+',this)">Отклонить</button><button class="btn" onclick="cabMake('+r.id+')">Оформить заказ</button></div>' : '')+'</div>';
+    }).join('') : '<div class="card empty">Заявок нет</div>'));
+}
+function cabDone(id, status, note){
+  var sb = sbClient(); if (!sb) return Promise.resolve();
+  return sb.rpc('cab_order_done', {p_id: id, p_status: status, p_note: note || ''}).then(function(r){
+    if (r.error){ cabErr(r.error); return; }
+    CABO.forEach(function(x){ if (x.id === id){ x.status = status; x.note = note || ''; x.done_by = S.me.name; } }); cabBar();
+  }, cabErr);
+}
+function cabReject(id, b){
+  var box = b.parentNode;
+  if (!box.querySelector('textarea')){ box.insertAdjacentHTML('beforebegin', '<textarea placeholder="Причина для клиента (необязательно): например, нет в наличии"></textarea>'); b.textContent = 'Отклонить заявку'; b.className = 'btn bad'; return; }
+  cabDone(id, 'rejected', box.previousSibling.value.trim()).then(function(){ toast('Заявка отклонена'); cabList(); });
+}
+// заявка → обычная форма заказа: клиент, товары, скидка; после сохранения заявка отмечается «оформлена»
+function cabMake(id){
+  var r = CABO.filter(function(x){ return x.id === id; })[0]; if (!r) return;
+  var c = (S.data.clients||[]).filter(function(x){ return x.name === r.client; })[0] || {name: r.client, addr: '', disc: 0, trade: false};
+  closeModal(); editOrder(null, c);
+  F.cabReq = id;
+  if ($('f_mgr') && r.mgr && S.sales.indexOf(r.mgr) >= 0) $('f_mgr').value = r.mgr;
+  (r.items||[]).forEach(function(it){
+    var p = S.price.filter(function(x){ return x.art === it.art; })[0];
+    var nl = p ? {art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit: it.unit === 'уп' && (p.perPack||1) > 1 ? 'уп' : 'шт', qty: +it.qty || 1}
+               : {art: it.art, name: 'своя позиция', custom: true, eur: 0, eurPack: 0, rub: +it.price || 0, perPack: 1, unit: 'шт', qty: +it.qty || 1};
+    if (p){ promoApply(nl); cabArt(nl); }
+    F.lines.push(nl);
+  });
+  if ($('f_comment')) $('f_comment').value = 'Из кабинета клиента, заявка №'+id+(r.comment ? ': '+r.comment : '');
+  drawLines();
+  toast('Проверьте заказ и нажмите «Сохранить»');
+}
+
+// база знаний: какие папки видят клиенты
+function cabKbBtn(){ var on = CABKB.indexOf(S.kbf) >= 0; return '<button class="btn '+(on?'sec':'ghost')+' sm" onclick="cabKbToggle()" title="Показывать эту папку в кабинете клиентов">'+(on?'👁 Видят клиенты':'🙈 Клиентам не видно')+'</button>'; }
+function cabKbToggle(){
+  var f = S.kbf, on = CABKB.indexOf(f) < 0, sb = sbClient(); if (!sb || !f) return;
+  sb.rpc('cab_kb_set', {p_folder: f, p_on: on}).then(function(r){
+    if (r.error){ cabErr(r.error); return; }
+    if (on) CABKB.push(f); else CABKB = CABKB.filter(function(x){ return x !== f; });
+    toast(on ? 'Папка «'+f+'» теперь видна клиентам' : 'Папка «'+f+'» скрыта от клиентов'); render();
+  }, cabErr);
+}
 // ---------- отгрузки: частичные и совместные ----------
 // Отгрузка — запись в базе: дата, кто отгрузил, какие позиции каких заказов. Заказ узнаём по «дата|менеджер|клиент».
 var SHIP = [], SD = null;
@@ -1379,7 +1523,7 @@ function editOrder(i, preset){
   var o = i===undefined || i===null ? null : S.orders[i];
   S.today = localToday();
   F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: ocur() || S.me.om || S.me.name };
-  if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = preset.disc; F.trade = preset.trade; }
+  if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = cabFrac(preset.name, preset.disc); F.trade = preset.trade; }
   F.lines=[]; F.extra = F.order;
   if (o){ F.orig = {mgr:o.mgr, client:o.client, date:o.date}; parseLines(); }
   var mgrs = S.sales.indexOf(F.mgr)>=0 ? S.sales : [F.mgr].concat(S.sales); // бухгалтер оформляет и свои заказы
@@ -1408,7 +1552,7 @@ function editOrder(i, preset){
   var pickClient = function(c){
     $('f_client').value = c.name;
     $('f_addr').value = c.addr || lastAddr(c.name) || $('f_addr').value;
-    $('f_disc').value = c.disc ? Math.round(c.disc*1000)/10 : '';
+    var cf = cabFrac(c.name, c.disc); $('f_disc').value = cf ? Math.round(cf*1000)/10 : ''; // персональная скидка — если задана
     $('f_trade').checked = c.trade;
     drawLines();
   };
@@ -1486,7 +1630,7 @@ function addCustom(){
 function addLine(art){
   var p = S.price.filter(function(x){ return x.art===art; })[0];
   var nl = {art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit:p.rub&&(p.perPack||1)===1?'шт':'уп', qty:1};
-  promoApply(nl); F.lines.push(nl); // действующая акция на товар — сразу в строке
+  promoApply(nl); cabArt(nl); F.lines.push(nl); // действующая акция на товар — сразу в строке
   $('f_find').value=''; $('f_sug').innerHTML=''; drawLines();
 }
 function drawLines(){
@@ -1541,6 +1685,7 @@ function saveOrder(){
   if (!(S.data.clients||[]).some(function(c){ return c.name.toLowerCase()===o.client.toLowerCase(); }))
     (S.data.clients = S.data.clients||[]).unshift({name:o.client, addr:o.addr, disc:o.disc/100, trade:o.trade, mgr:o.mgr, phone:'', comment:'', n:1, sum:o.sum, last:o.date});
   if (F.orig) shipRekey(okey(F.orig), okey(o)); // отгрузки — вслед за заказом
+  if (F.cabReq) cabDone(F.cabReq, 'done', ''); // заявка из кабинета оформлена
   closeModal(); render(); toast('Заказ сохранён');
   var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; if (form.row){ shown.row = form.row; shown.sheet = form.sheet; } OPCTX = {ord: shown}; return api('saveOrder', o); });
   p = p.then(function(pos){ return typeof pos === 'number' ? {row: pos} : pos; }); // старый сервер отвечал только номером строки
@@ -2175,9 +2320,9 @@ function openClient(i){
     '<div class="stats"><div class="stat"><small>Заказов</small><b>'+c.n+'</b></div><div class="stat"><small>На сумму</small><b>'+money(c.sum)+'</b></div></div>'+
     '<div class="card" style="margin-top:0"><div class="s" style="white-space:pre-line">'+esc(c.addr||'Адрес не указан')+'</div>'+
     '<div class="acts" style="margin-top:10px;flex-wrap:wrap">'+callButtons(c.phone+'\n'+c.addr)+routeButton(c.addr)+'</div>'+
-    '<div class="tags">'+(c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'<span class="tag gray">без скидки</span>')+(c.trade?'<span class="tag vio">торгующая</span>':'')+(c.mgr?'<span class="tag gray">менеджер '+esc(c.mgr)+'</span>':'')+'</div>'+
+    '<div class="tags">'+(c.disc?'<span class="tag">скидка '+pct(c.disc)+'</span>':'<span class="tag gray">без скидки</span>')+(c.trade?'<span class="tag vio">торгующая</span>':'')+(c.mgr?'<span class="tag gray">менеджер '+esc(c.mgr)+'</span>':'')+cabDiscTag(c)+'</div>'+
     (c.comment?'<div class="note" style="white-space:pre-line">'+esc(c.comment)+'</div>':'')+'</div>'+clientInfo(c)+clientMonths(c)+
-    '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn sec" onclick="editReq()">📄 Реквизиты</button><button class="btn sec" onclick="contractForm()">📝 Договор</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
+    '<div class="acts" style="margin-top:0"><button class="btn" onclick="closeModal();editOrder(null,CUR_CLIENT)">+ Заказ</button><button class="btn sec" onclick="noteForm()">+ Запись</button><button class="btn sec" onclick="cabLink()">🔗 Кабинет</button><button class="btn sec" onclick="cabDisc()">🏷 Персональная скидка</button><button class="btn sec" onclick="editReq()">📄 Реквизиты</button><button class="btn sec" onclick="contractForm()">📝 Договор</button><button class="btn ghost" onclick="editClient(CUR_CLIENT)">Изменить</button></div>'+
     '<div id="c_note"></div><div class="sec-t">История</div><div id="c_hist"><div class="empty">Загрузка…</div></div>');
   var drawHist = function(h){
     if (CUR_CLIENT !== c || !$('c_hist')) return;
@@ -2328,7 +2473,7 @@ function vKb(){
   v.innerHTML = '<div class="bar"><input id="kq" placeholder="Поиск по всем папкам" value="'+esc(KQ)+'">'+(S.me.boss?'<button class="btn" onclick="editKb()">+ Документ</button>':'')+'</div>'+
     '<div class="ftabs">'+folders.map(function(f){ return '<button class="'+(f===S.kbf&&!KQ?'on':'')+'" onclick="KQ=\'\';S.kbf=\''+esc(f).replace(/'/g,'&#39;')+'\';render()">'+esc(f)+(cnt[f]?' <small>'+cnt[f]+'</small>':'')+'</button>'; }).join('')+
       (S.me.boss?'<button class="add" onclick="editFolder()">+ папка</button>':'')+'</div>'+
-    (S.me.boss&&!KQ&&S.kbf?'<div class="note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1">Папка «'+esc(S.kbf)+'»</span><button class="btn ghost sm" onclick="editFolder(S.kbf)">✎ Переименовать</button>'+(S.kb.drive?'<a class="btn ghost sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(S.kb.drive)+'">📁 Файлы на Диске</a>':'')+'</div>':'')+
+    (S.me.boss&&!KQ&&S.kbf?'<div class="note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1">Папка «'+esc(S.kbf)+'»</span><button class="btn ghost sm" onclick="editFolder(S.kbf)">✎ Переименовать</button>'+cabKbBtn()+''+(S.kb.drive?'<a class="btn ghost sm" style="text-decoration:none" target="_blank" rel="noopener" href="'+esc(S.kb.drive)+'">📁 Файлы на Диске</a>':'')+'</div>':'')+
     (list.length ? (KQ ? secs.map(function(s){ return '<div class="sec-t">'+esc(s)+'</div>'+list.filter(function(d){ return d.section===s; }).map(item).join(''); }).join('') : list.map(item).join(''))
       : '<div class="card empty">'+(KQ?'Ничего не найдено':'В этой папке пока пусто.'+(S.me.boss?'<br>Нажмите «+ Документ» или перенесите сюда документ из другой папки.':''))+'</div>');
   var t; $('kq').oninput = function(){ clearTimeout(t); t = setTimeout(function(){ KQ = $('kq').value.trim(); render(); }, 300); };
