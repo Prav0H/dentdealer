@@ -441,7 +441,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 53, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 54, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -634,7 +634,7 @@ function api(fn){
   busy(1);
   var sub = fn !== 'login' ? opSubmit(fn, args) : null, held = true, rel = function(){ if (held){ held = false; busy(-1); } };
   var call = sub ? sub.then(function(id){ rel(); return opWait(id); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
-    : run(fn, fn === 'login' ? [args[0]] : [S.token].concat(args));
+    : run(fn, fn === 'login' ? [args[0], URLKEY] : [S.token].concat(args));
   return call.then(function(x){ rel(); return x; }, function(e){
     rel();
     var m = String(e && e.message || e).replace(/^Error:\s*/,'').replace(/^Exception:\s*/,'');
@@ -708,7 +708,7 @@ function saveTgToken(){
 
 // Личная ссылка: открыв её один раз и добавив на экран «Домой», код больше вводить не нужно.
 function showMyLink(){
-  (GAS ? api('myLink') : Promise.resolve(location.origin + location.pathname + '?k=' + S.token)).then(function(url){
+  api('myLink').then(function(u){ return GAS ? u : location.origin + location.pathname + '?k=' + String(u).split('?k=')[1]; }).then(function(url){
     openModal('<h2><span>Вход без кода</span><button class="x" onclick="closeModal()">×</button></h2>'+
       '<div style="line-height:1.5">Это ваша личная ссылка. Откройте её и добавьте на экран «Домой» — программа будет открываться сразу, без кода.<br><br>'+
       '<b>iPhone:</b> откройте ссылку в Safari → кнопка «Поделиться» → «На экран Домой».<br><b>Android:</b> откройте в Chrome → меню ⋮ → «Добавить на главный экран».<br><br>'+
