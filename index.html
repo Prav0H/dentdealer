@@ -447,7 +447,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 56, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 57, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1529,25 +1529,25 @@ function editOrder(i, preset){
   var mgrs = S.sales.indexOf(F.mgr)>=0 ? S.sales : [F.mgr].concat(S.sales); // бухгалтер оформляет и свои заказы
   var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+mgrs.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
   openModal('<h2><span>'+(o?'Заказ':'Новый заказ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
-    mgrSel+(S.me.assist?'<div class="note" style="margin-top:0">Заказ оформляется от имени: <b>'+esc(fio(S.me.om))+'</b></div>':'')+
-    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус'+(canSt()?'<select id="f_status"><option value="">—</option>'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'<input value="'+esc(stLbl(F.status))+'" disabled title="Статус ставят бухгалтер и склад">')+'</label></div>'+
     '<label class="f">Клиент<input id="f_client" autocomplete="off" placeholder="Начните вводить название" value="'+esc(F.client)+'"></label><div id="f_csug"></div>'+
     '<label class="f">Адрес доставки / контакты<textarea id="f_addr">'+esc(F.addr)+'</textarea></label>'+
     '<div class="tags" style="margin-top:6px"><button class="tag gray" onclick="$(\'f_addr\').value=\'Самовывоз\'">Самовывоз</button><button class="tag gray" onclick="addrFromCard()">Адрес из карточки клиента</button></div>'+
     '<label class="f">Товары из прайса<input id="f_find" placeholder="Артикул, название, размер, гранулы, цена…" autocomplete="off"></label><div id="f_sug"></div><div id="f_lines"></div>'+
-    (o?'<label class="f">'+(F.lines.length?'Остальное в заказе (текстом, без цены)':'Состав заказа')+'<textarea id="f_order">'+esc(F.extra)+'</textarea></label>':'')+
+    (o&&F.extra?'<div class="note">Также в заказе (текстом, сохранится как есть): '+esc(F.extra)+'</div>':'')+
     '<div class="row2"><label class="f">Скидка, %<input id="f_disc" inputmode="decimal" value="'+(Math.round(F.disc*1000)/10||'')+'"></label><label class="f">Доставка, ₽<input id="f_dlv" inputmode="decimal" placeholder="0" value="'+(F.dlv||'')+'"></label></div>'+
     '<label class="chk"><input type="checkbox" id="f_trade"'+(F.trade?' checked':'')+'> Торгующая компания (бонус 1,5 %)</label>'+
     '<div class="total"><span>Товары со скидкой</span><span style="display:flex;align-items:center;gap:6px"><input id="f_sum" inputmode="decimal" style="width:130px;text-align:right" value="'+((F.sum||0)-(F.dlv||0)||'')+'"> ₽</span></div>'+
     '<div class="total" style="background:none;padding:6px 12px;margin-top:4px;font-weight:500"><span>Сумма заказа с доставкой</span><span id="f_total"></span></div>'+
-    '<div class="note">Курс € — <b id="f_rate">'+S.rate+'</b> ₽ (для торгующей компании — '+S.rateTrade+' ₽). В таблицу пишется сумма с доставкой; скидка, бонус и план считаются без доставки. Сумму товаров можно поправить вручную.</div>'+
+    mgrSel+(S.me.assist?'<div class="note" style="margin-top:0">Заказ оформляется от имени: <b>'+esc(fio(S.me.om))+'</b></div>':'')+
+    '<div class="row2"><label class="f">Дата<input type="date" id="f_date" value="'+F.date+'"></label><label class="f">Статус'+(canSt()?'<select id="f_status"><option value="">—</option>'+STATUSES.map(function(s){ return '<option'+(s===F.status?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'<input value="'+esc(stLbl(F.status))+'" disabled title="Статус ставят бухгалтер и склад">')+'</label></div>'+
+    '<div id="f_shipsec"></div>'+
     '<div class="row2"><label class="f">Номер счёта<input id="f_inv" value="'+esc(F.inv)+'"></label><label class="f">Нал / безнал<select id="f_cash" onchange="cashChanged()"><option value="">—</option><option'+(F.cash==='Нал'?' selected':'')+'>Нал</option><option'+(F.cash==='Безнал'?' selected':'')+'>Безнал</option>'+(F.cash&&F.cash!=='Нал'&&F.cash!=='Безнал'?'<option selected>'+esc(F.cash)+'</option>':'')+'</select></label></div>'+
     '<label class="chk"><input type="checkbox" id="f_paid"'+(F.paid?' checked':'')+'> Оплачен <small id="f_paid_n" style="color:var(--mute)"></small></label>'+
     '<div class="row2"><label class="f">Дата отгрузки<input type="date" id="f_ship" value="'+F.ship+'"></label><label class="f">Дата доставки<input type="date" id="f_deliv" value="'+F.deliv+'"></label></div>'+
     '<label class="f">Трек-номер СДЭК<input id="f_cdek" value="'+esc(F.cdek)+'"></label>'+
     '<label class="f">Комментарий<textarea id="f_comment">'+esc(F.comment)+'</textarea></label>'+
     '<div class="acts">'+(o?'<button class="btn bad" onclick="delOrder()">Удалить</button>':'<button class="btn ghost" onclick="closeModal()">Отмена</button>')+'<button class="btn" onclick="saveOrder()">Сохранить</button></div>');
-  if (o){ var acts = document.querySelectorAll('#sheet .acts'); if (acts.length) acts[acts.length-1].insertAdjacentHTML('beforebegin', shipSection(i)); }
+  if (o) $('f_shipsec').innerHTML = shipSection(i); // отгрузки — сразу под датой и статусом
   $('f_find').oninput = suggest;
   var pickClient = function(c){
     $('f_client').value = c.name;
@@ -1666,7 +1666,7 @@ function saveOrder(){
     var pr = l.own ? l.ownRub : l.custom ? l.rub : 0;
     return l.art+' - '+l.qty+' '+l.unit+(pr ? ' по '+pr+' ₽' : '')+(l.ld ? ' скидка '+l.ld+'%' : ''); });
   var txt = lines.join(', ');
-  var extra = $('f_order') ? $('f_order').value.trim() : '';
+  var extra = $('f_order') ? $('f_order').value.trim() : String(F.extra||'').trim(); // нераспознанный текст заказа сохраняется как был
   var o = {
     row: F.row, sheet: F.sheet, orig: F.orig, mgr: $('f_mgr') ? $('f_mgr').value : (S.me.om || S.me.name),
     date: $('f_date').value, status: $('f_status') ? $('f_status').value : F.status, client: $('f_client').value.trim(), addr: $('f_addr').value,
