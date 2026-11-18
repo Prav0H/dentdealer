@@ -380,6 +380,9 @@ function sbOrdersStart(){
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBTASK[p.old.id]; }
       else if (p.new && p.new.id) SBTASK[p.new.id] = p.new.o;
       sbApplySoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'shipments'}, function(p){
+      if (p.eventType === 'DELETE'){ if (p.old && p.old.id) SHIP = SHIP.filter(function(x){ return x.id !== p.old.id; }); } else shipPut(p.new);
+      shipRedraw();
     }).on('postgres_changes', {event:'*', schema:'public', table:'emp_stats'}, function(p){
       if (!SBSTAT || p.eventType === 'DELETE' || !p.new || !p.new.emp) return;
       SBSTAT[p.new.emp + '|' + p.new.month] = p.new;
@@ -407,7 +410,7 @@ function sbLoadOrders(){
     });
   };
   return Promise.all([page(0), c.from('tasks').select('id,o'), c.from('emp_stats').select('emp,month,ver,v')]).then(function(r){
-    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true;
+    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad();
     if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
     if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
     sbApply();
@@ -441,7 +444,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 54, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 55, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1020,7 +1023,7 @@ function orderCard(o,i){
   return '<div class="item'+(o.saving===true?' saving':'')+'" onclick="'+(S.me.edit?'editOrder':'viewOrder')+'('+i+')"><div class="t"><b>'+esc(o.client)+'</b><span>'+money(o.sum)+'</span></div>'+
     '<div class="s">'+dmy(o.date)+(S.me.all&&!mgr?' · '+esc(o.mgr):'')+' · '+esc(o.order)+'</div>'+(wh()&&o.addr?'<div class="s">📍 '+esc(addrLine(o.addr)||o.addr)+'</div>':'')+'<div class="tags">'+
     (wh()&&o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
-    (o.saving===true?'<span class="tag">записывается…</span>':'')+stBtn(o,i)+paidBtn(o,i)+
+    (o.saving===true?'<span class="tag">записывается…</span>':'')+stBtn(o,i)+shipTag(o,i)+paidBtn(o,i)+
     (o.disc?'<span class="tag gray">скидка '+pct(o.disc)+'</span>':'')+(o.trade?'<span class="tag vio">торгующая</span>':'')+
     (o.inv?'<span class="tag gray">'+esc(o.inv)+'</span>':'')+(S.me.sales&&o.bonus&&o.bonus.sum?'<span class="tag">бонус '+money(o.bonus.sum)+'</span>':'')+'</div></div>';
 }
@@ -1049,7 +1052,7 @@ function orderRow(o, i){
   var ed = S.me.edit;
   var td = function(h, cls, f){ return '<td'+(cls?' class="'+cls+(ed&&f?' ed':'')+'"':(ed&&f?' class="ed"':''))+(ed&&f?' onclick="cellEdit(event,'+i+',\''+f+'\')" title="Нажмите, чтобы изменить"':'')+'>'+h+'</td>'; };
   return td(dmy(o.date),'num','date')+td(esc(o.mgr),'','mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','','addr')+td('<div class="cl">'+esc(o.order)+'</div>','','order')+
-    td(o.disc?pct(o.disc):'','num','disc')+td(money(o.sum),'num','sum')+td(o.trade?'да':'','','trade')+td(esc(o.inv),'','inv')+td(esc(o.cash),'','cash')+td(stBtn(o,i))+td(dmy(o.ship),'num','ship')+td(dmy(o.deliv),'num','deliv')+td(paidBtn(o,i));
+    td(o.disc?pct(o.disc):'','num','disc')+td(money(o.sum),'num','sum')+td(o.trade?'да':'','','trade')+td(esc(o.inv),'','inv')+td(esc(o.cash),'','cash')+td(stBtn(o,i)+shipTag(o,i))+td(dmy(o.ship),'num','ship')+td(dmy(o.deliv),'num','deliv')+td(paidBtn(o,i));
 }
 // Перерисовать одну строку таблицы (или карточку) — остальное на экране не трогаем.
 function redrawOrder(o){
@@ -1090,7 +1093,7 @@ function cellEdit(ev, i, f){
 // Записать изменённые поля заказа: экран обновляется сразу, таблица — в фоне (как при сохранении формы).
 function patchOrder(o, patch){
   var orig = {mgr:o.mgr, client:o.client, date:o.date};
-  Object.assign(o, patch); o.saving = true; redrawOrder(o);
+  Object.assign(o, patch); shipRekey(okey(orig), okey(o)); o.saving = true; redrawOrder(o);
   var p = { row:o.row, sheet:o.sheet, orig:orig, mgr:o.mgr, date:o.date, status:o.status, client:o.client, addr:o.addr, order:o.order,
     disc:Math.round((o.disc||0)*10000)/100, sum:o.sum, dlv:o.dlv, trade:!!o.trade, inv:o.inv, cash:o.cash, paid:!!o.paid, ship:o.ship, deliv:o.deliv, cdek:o.cdek, comment:o.comment };
   afterSave(o, function(){ return api('saveOrder', p); }).then(function(pos){
@@ -1166,6 +1169,152 @@ function delivered(k){
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
 function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Пустые'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
 function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
+// ---------- отгрузки: частичные и совместные ----------
+// Отгрузка — запись в базе: дата, кто отгрузил, какие позиции каких заказов. Заказ узнаём по «дата|менеджер|клиент».
+var SHIP = [], SD = null;
+function okey(o){ return (o.date||'')+'|'+(o.mgr||'')+'|'+(o.client||''); }
+function canShip(){ return !!(S.me && (S.me.st || S.me.boss)); }
+function fmtQ(n){ return String(Math.round((+n||0)*100)/100).replace('.', ','); }
+// позиции заказа из текста «BG-B05 - 1 шт, 9003 - 2 уп»; что не распозналось — одна позиция «как есть»
+function shipLines(o){
+  var out = [];
+  String(o.order||'').split(/,\s*/).forEach(function(part){
+    part = part.trim(); if (!part) return;
+    var m = part.match(/^(.+?)\s*-\s*(\d+(?:[.,]\d+)?)\s*(уп|шт)\.?/i);
+    if (m) out.push({art: m[1].trim(), qty: num(m[2]), unit: m[3].toLowerCase()});
+    else out.push({art: part, qty: 1, unit: ''});
+  });
+  return out;
+}
+function shipInfo(o){
+  var k = okey(o), ships = SHIP.filter(function(s){ return (s.keys||[]).indexOf(k) >= 0; });
+  var lines = shipLines(o), done = {};
+  ships.forEach(function(s){ (s.items||[]).forEach(function(it){ if (it.k === k){ var a = String(it.art).toLowerCase()+'|'+(it.unit||''); done[a] = (done[a]||0) + num(it.qty); } }); });
+  lines.forEach(function(l){ var a = l.art.toLowerCase()+'|'+l.unit, d = Math.min(l.qty, done[a]||0); l.done = d; done[a] = (done[a]||0) - d; l.left = Math.max(0, Math.round((l.qty - d)*100)/100); });
+  var full = lines.length > 0 && lines.every(function(l){ return !l.left; });
+  var w = {}; ships.forEach(function(s){ (s.keys||[]).forEach(function(x){ if (x !== k) w[x] = 1; }); });
+  return { k: k, lines: lines, ships: ships, st: !ships.length ? '' : full ? 'full' : 'part', with: Object.keys(w), nDone: lines.filter(function(l){ return !l.left; }).length };
+}
+function ordByKey(k){ return (S.allOrders || S.orders || []).filter(function(o){ return okey(o) === k; })[0] || null; }
+function keyLabel(k){ var o = ordByKey(k), p = k.split('|'); return o ? esc(o.client)+' от '+dmy(o.date) : esc(p.slice(2).join('|'))+' от '+dmy(p[0]); }
+// значок в списке заказов: «📦 частично 2 из 5» / «📦 отгружен», 🔗 — отгружали вместе с другим заказом
+function shipTag(o, i){
+  if (!SHIP.length) return '';
+  var s = shipInfo(o); if (!s.st) return '';
+  return '<button class="tag '+(s.st==='full'?'ok':'warn')+'" onclick="event.stopPropagation();shipView('+i+')" title="Отгрузки по заказу">📦 '+
+    (s.st==='full' ? 'отгружен' : 'частично, осталось '+(s.lines.length - s.nDone)+' поз.')+(s.with.length?' 🔗':'')+'</button>';
+}
+// блок «Отгрузки» в окне заказа
+function shipSection(i){
+  var o = S.orders[i]; if (!o || !o.client) return '';
+  var s = shipInfo(o), h = '<div class="card" id="shipsec"><div class="note" style="margin:0 0 6px">Отгрузки</div>';
+  if (!s.ships.length) h += '<div class="note" style="margin:0">Ещё не отгружали.</div>';
+  else {
+    h += s.lines.map(function(l){
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>'+esc(l.art)+'</span><span style="white-space:nowrap;color:'+(l.left?'var(--warn)':'var(--ok)')+'">'+
+        (l.unit ? fmtQ(l.done)+' из '+fmtQ(l.qty)+' '+l.unit : (l.left ? 'не отгружено' : 'отгружено'))+(l.left?'':' ✓')+'</span></div>';
+    }).join('');
+    h += s.ships.map(function(x){
+      var mine = (x.items||[]).filter(function(it){ return it.k === s.k; }), other = (x.keys||[]).filter(function(k){ return k !== s.k; });
+      return '<div class="note" style="border-top:1px solid var(--line);padding-top:6px">Отгрузка №'+x.id+' от '+dmy(x.date)+(x.by_name?' · '+esc(x.by_name):'')+'<br>'+
+        mine.map(function(it){ return esc(it.art)+(it.unit?' — '+fmtQ(it.qty)+' '+it.unit:''); }).join(', ')+
+        (other.length ? '<br>🔗 вместе с: '+other.map(keyLabel).join('; ') : '')+(x.note ? '<br>'+esc(x.note) : '')+
+        (canShip() ? ' <button class="tag gray" onclick="shipCancel('+x.id+',this)">отменить</button>' : '')+'</div>';
+    }).join('');
+  }
+  if (canShip() && s.st !== 'full') h += '<div class="acts" style="margin-top:8px"><button class="btn sec" onclick="shipDialog('+i+')">📦 Отгрузить'+(s.st==='part'?' остаток':'')+'</button></div>';
+  return h + '</div>';
+}
+function shipView(i){
+  var o = S.orders[i]; if (!o) return;
+  openModal('<h2><span>'+esc(o.client)+' · '+dmy(o.date)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+shipSection(i));
+}
+// окно «Отгрузка»: позиции этого заказа + можно добавить другие заказы (сначала того же клиента)
+function shipDialog(i){
+  var o = S.orders[i]; if (!o) return;
+  SD = { list: [o] };
+  openModal('<h2><span>Отгрузка</span><button class="x" onclick="closeModal()">×</button></h2>'+
+    '<label class="f">Дата отгрузки<input type="date" id="sd_date" value="'+localToday()+'"></label>'+
+    '<div class="note">Отметьте, что уходит сейчас. Если отгружаете не всё — уменьшите количество: остаток останется «к отгрузке».</div>'+
+    '<div id="sd_list"></div>'+
+    '<div class="sec-t">Отгрузить вместе с другим заказом</div><input id="sd_q" placeholder="Найти заказ: клиент или товар" autocomplete="off" oninput="sdMore()"><div id="sd_cand"></div>'+
+    '<label class="f">Комментарий<input id="sd_note" placeholder="например: курьер, СДЭК, чего не хватило"></label>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" id="sd_go" onclick="shipSave()">Отгрузить</button></div>');
+  sdDraw();
+}
+function sdDraw(){
+  $('sd_list').innerHTML = SD.list.map(function(o, n){
+    var s = shipInfo(o);
+    return '<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>'+esc(o.client)+'</b> <small style="color:var(--mute)">'+dmy(o.date)+' · '+esc(o.mgr)+'</small></div>'+
+      (n ? '<button class="tag gray" onclick="SD.list.splice('+n+',1);sdDraw()">убрать</button>' : '')+'</div>'+
+      s.lines.map(function(l, j){
+        return '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" data-o="'+n+'" data-j="'+j+'"'+(l.left?' checked':' disabled')+'>'+
+          '<span style="flex:1">'+esc(l.art)+(l.done ? ' <small style="color:var(--mute)">(уже '+(l.unit?fmtQ(l.done)+' '+l.unit:'отгружено')+')</small>' : '')+'</span>'+
+          (l.unit && l.left ? '<input data-q="'+n+'_'+j+'" inputmode="decimal" style="width:64px;text-align:right" value="'+fmtQ(l.left)+'"> '+l.unit : '')+'</label>';
+      }).join('')+'</div>';
+  }).join('');
+  sdMore();
+}
+function sdMore(){
+  var q = ($('sd_q') ? $('sd_q').value : '').trim().toLowerCase(), keys = SD.list.map(okey), c0 = SD.list[0].client;
+  var all = S.allOrders || S.orders || [];
+  var res = all.filter(function(o){
+    if (!o.client || keys.indexOf(okey(o)) >= 0 || o.status === 'Доставлен' || shipInfo(o).st === 'full') return false;
+    return q ? (o.client+' '+o.order).toLowerCase().indexOf(q) >= 0 : o.client === c0;
+  }).sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 8);
+  SD.cand = res;
+  $('sd_cand').innerHTML = res.length ? '<div class="sug">'+res.map(function(o, n){
+    return '<div onclick="SD.list.push(SD.cand['+n+']);$(\'sd_q\').value=\'\';sdDraw()"><b>'+esc(o.client)+'</b> · '+dmy(o.date)+' · '+esc(o.mgr)+'<br><small>'+esc(String(o.order||'').slice(0,140))+'</small></div>';
+  }).join('')+'</div>' : '<div class="note">'+(q ? 'Ничего не нашлось' : 'Других неотгруженных заказов этого клиента нет — найдите нужный заказ поиском')+'</div>';
+}
+function shipSave(){
+  var items = [], keys = [];
+  SD.list.forEach(function(o, n){
+    var s = shipInfo(o), k = okey(o), any = false;
+    s.lines.forEach(function(l, j){
+      var cb = document.querySelector('#sd_list input[data-o="'+n+'"][data-j="'+j+'"]'); if (!cb || !cb.checked || !l.left) return;
+      var qi = document.querySelector('#sd_list input[data-q="'+n+'_'+j+'"]'), q = l.unit ? Math.min(num(qi && qi.value), l.left) : 1;
+      if (q > 0){ items.push({k: k, art: l.art, qty: q, unit: l.unit}); any = true; }
+    });
+    if (any) keys.push(k);
+  });
+  if (!items.length){ toast('Отметьте, что отгружаете', true); return; }
+  var c = sbClient();
+  if (!c || !S.sbOn){ toast('Нет связи с базой — попробуйте через минуту', true); return; }
+  var row = { date: $('sd_date').value || localToday(), note: $('sd_note').value.trim(), items: items, keys: keys, by_name: fio(S.me.name) || S.me.name };
+  var list = SD.list.slice();
+  $('sd_go').disabled = true; busy(1);
+  c.from('shipments').insert(row).select().then(function(r){
+    busy(-1);
+    if (r.error){ $('sd_go').disabled = false; toast('Не удалось записать отгрузку: '+r.error.message, true); return; }
+    (r.data||[]).forEach(shipPut);
+    closeModal(); toast('Отгрузка №'+(r.data && r.data[0] ? r.data[0].id : '')+' записана');
+    // дата отгрузки в заказе (видна в таблице) — если ещё не стоит
+    if (S.me.edit) list.forEach(function(o){ if (keys.indexOf(okey(o)) >= 0 && !o.ship) patchOrder(o, {ship: row.date}); });
+    shipRedraw();
+  }, function(e){ busy(-1); $('sd_go').disabled = false; toast('Нет связи с базой', true); });
+}
+function shipCancel(id, btn){
+  if (!btn.dataset.sure){ btn.dataset.sure = 1; btn.textContent = 'точно отменить?'; btn.className = 'tag bad'; return; }
+  var c = sbClient(); if (!c) return;
+  c.from('shipments').delete().eq('id', id).then(function(r){
+    if (r.error){ toast('Не удалось отменить: '+r.error.message, true); return; }
+    SHIP = SHIP.filter(function(x){ return x.id !== id; });
+    toast('Отгрузка №'+id+' отменена'); closeModal(); shipRedraw();
+  });
+}
+function shipPut(x){ if (!x || !x.id) return; SHIP = SHIP.filter(function(y){ return y.id !== x.id; }); SHIP.push(x); }
+function shipRedraw(){ if (S.tab === 'orders' && $('modal').classList.contains('hidden')) try { drawOrders(); } catch(e){} }
+function shipLoad(){
+  var c = sbClient(); if (!c) return Promise.resolve();
+  return c.from('shipments').select('*').order('id').range(0, 9999).then(function(r){ if (!r.error){ SHIP = r.data || []; shipRedraw(); } }, function(){});
+}
+// заказ сменил дату, менеджера или клиента — отгрузки переезжают вместе с ним
+function shipRekey(oldK, newK){
+  if (!oldK || oldK === newK || !SHIP.some(function(s){ return (s.keys||[]).indexOf(oldK) >= 0; })) return;
+  var c = sbClient(); if (!c) return;
+  c.rpc('ship_rekey', {p_old: oldK, p_new: newK}).then(function(){ shipLoad(); }, function(){});
+}
 function viewOrder(i){
   var o = S.orders[i];
   openModal('<h2><span>'+esc(o.client)+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
@@ -1179,7 +1328,7 @@ function viewOrder(i){
     (o.ship?'<span class="tag gray">отгрузка '+dmy(o.ship)+'</span>':'')+(o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+'</div>'+
     (o.comment?'<div class="note">Комментарий: '+esc(o.comment)+'</div>':'')+(o.cdek?'<div class="note">Трек-номер СДЭК: '+esc(o.cdek)+'</div>':'')+'</div>'+
     (canSt()?'<div class="sec-t">Поставить статус</div><div class="acts" style="margin-top:0">'+STATUSES.map(function(s){
-      return '<button class="btn '+(s===o.status?'':'sec')+'" onclick="closeModal();setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('')+'</div>':''));
+      return '<button class="btn '+(s===o.status?'':'sec')+'" onclick="closeModal();setState('+i+',\''+s+'\',null)">'+s+'</button>'; }).join('')+'</div>':'')+shipSection(i));
 }
 
 // Статус и оплата — прямо в списке, без открытия заказа.
@@ -1254,6 +1403,7 @@ function editOrder(i, preset){
     '<label class="f">Трек-номер СДЭК<input id="f_cdek" value="'+esc(F.cdek)+'"></label>'+
     '<label class="f">Комментарий<textarea id="f_comment">'+esc(F.comment)+'</textarea></label>'+
     '<div class="acts">'+(o?'<button class="btn bad" onclick="delOrder()">Удалить</button>':'<button class="btn ghost" onclick="closeModal()">Отмена</button>')+'<button class="btn" onclick="saveOrder()">Сохранить</button></div>');
+  if (o){ var acts = document.querySelectorAll('#sheet .acts'); if (acts.length) acts[acts.length-1].insertAdjacentHTML('beforebegin', shipSection(i)); }
   $('f_find').oninput = suggest;
   var pickClient = function(c){
     $('f_client').value = c.name;
@@ -1390,6 +1540,7 @@ function saveOrder(){
   if (idx >= 0) list[idx] = shown; else if (o.date.slice(0,7) === S.month) list.unshift(shown);
   if (!(S.data.clients||[]).some(function(c){ return c.name.toLowerCase()===o.client.toLowerCase(); }))
     (S.data.clients = S.data.clients||[]).unshift({name:o.client, addr:o.addr, disc:o.disc/100, trade:o.trade, mgr:o.mgr, phone:'', comment:'', n:1, sum:o.sum, last:o.date});
+  if (F.orig) shipRekey(okey(F.orig), okey(o)); // отгрузки — вслед за заказом
   closeModal(); render(); toast('Заказ сохранён');
   var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; if (form.row){ shown.row = form.row; shown.sheet = form.sheet; } OPCTX = {ord: shown}; return api('saveOrder', o); });
   p = p.then(function(pos){ return typeof pos === 'number' ? {row: pos} : pos; }); // старый сервер отвечал только номером строки
