@@ -448,7 +448,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 60, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 61, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -598,6 +598,7 @@ function clientKeys(c){ return [c.name, c.legal].concat(String(c.alias||'').spli
 var OPW = {saveOrder:1, setOrderState:1, deleteOrder:1, saveClient:1, addClientNote:1, saveReport:1, savePlan:1, saveTask:1, deleteTask:1,
   checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1, markLesson:1, submitExam:1, gradeExam:1};
 var OPCTX = null;
+var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1}; // главные в базе (этап 3)
 function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
 function opSubmit(fn, args){
   var ctx = OPCTX; OPCTX = null;
@@ -640,7 +641,12 @@ function api(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
   var sub = fn !== 'login' ? opSubmit(fn, args) : null, held = true, rel = function(){ if (held){ held = false; busy(-1); } };
-  var call = sub ? sub.then(function(id){ rel(); return opWait(id); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
+  var call = sub ? sub.then(function(id){ rel(); return opWait(id).catch(function(e){
+      // заказы и задачи главные в базе: сбой Google — только копия в таблице не обновилась, сотруднику это не ошибка
+      var m = String(e && e.message || e);
+      if (!DBOWN[fn] || /AUTH/.test(m)) throw e;
+      console.warn('таблица не обновилась', fn, m); return null;
+    }); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
     : run(fn, fn === 'login' ? [args[0], URLKEY] : [S.token].concat(args));
   return call.then(function(x){ rel(); return x; }, function(e){
     rel();
