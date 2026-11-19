@@ -448,7 +448,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 59, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 60, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1174,6 +1174,69 @@ function delivered(k){
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
 function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Пустые'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
 function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
+// ---------- оплата отгрузок и бонус по ним ----------
+// Бонус менеджера = бонус заказа × доля отгруженного (по стоимости позиций); идёт в месяц, когда нажали «Оплачено».
+var SHIP_ZP_FROM = '2026-12'; // с этого месяца ЗП считается по оплаченным отгрузкам
+function lineW(l){
+  var p = l.unit ? S.price.filter(function(x){ return x.art.toLowerCase() === String(l.art).toLowerCase(); })[0] : null;
+  return p ? unitPrice(p, l.unit) * l.qty : 0;
+}
+function shipShare(o, s){
+  var k = okey(o), lines = shipLines(o), w = lines.map(lineW), known = w.filter(function(x){ return x > 0; });
+  var avg = known.length ? known.reduce(function(a, b){ return a + b; }, 0) / known.length : 1; // позиция текстом — как средняя
+  w = w.map(function(x){ return x > 0 ? x : avg; });
+  var tot = w.reduce(function(a, b){ return a + b; }, 0), got = 0; if (!tot) return 0;
+  (s.items||[]).forEach(function(it){
+    if (it.k !== k) return;
+    for (var j = 0; j < lines.length; j++){
+      var l = lines[j];
+      if (l.art.toLowerCase() === String(it.art).toLowerCase() && (l.unit||'') === (it.unit||'')){ got += w[j] * Math.min(1, num(it.qty) / (l.qty || 1)); break; }
+    }
+  });
+  return Math.min(1, got / tot);
+}
+function shipBonus(s, mgr){
+  var sum = 0, rows = [];
+  (s.keys||[]).forEach(function(k){
+    var o = ordByKey(k); if (!o || (mgr && o.mgr !== mgr) || !o.bonus) return;
+    var sh = shipShare(o, s), b = Math.round(o.bonus.sum * sh * 100) / 100;
+    sum += b; rows.push({o: o, share: sh, b: b});
+  });
+  return {sum: Math.round(sum * 100) / 100, rows: rows};
+}
+function canPay(){ return !!(S.me && S.me.edit); }
+function shipPayTag(x, i){
+  if (x.paid) return ' <span class="tag ok">₽ оплачено '+dmy(x.paid_at||'').slice(0,5)+'</span>'+(canPay() ? ' <button class="tag gray" onclick="shipPay('+x.id+',false,'+i+')">снять</button>' : '');
+  return canPay() ? ' <button class="tag warn" onclick="shipPay('+x.id+',true,'+i+')">₽ Отметить «Оплачено»</button>' : ' <span class="tag warn">не оплачено</span>';
+}
+function shipPay(id, paid, i){
+  var c = sbClient(); if (!c){ toast('Нет связи с базой', true); return; }
+  c.rpc('ship_paid', {p_id: id, p_paid: paid}).then(function(r){
+    if (r.error){ toast(r.error.message, true); return; }
+    SHIP.forEach(function(x){ if (x.id === id){ x.paid = paid; x.paid_at = paid ? localToday() : null; x.paid_by = paid ? S.me.name : ''; } });
+    toast(paid ? 'Отгрузка №'+id+' оплачена — бонус пойдёт в этот месяц' : 'Отметка оплаты снята');
+    var el = $('shipsec'); if (el) el.outerHTML = shipSection(i);
+    shipRedraw();
+  }, function(){ toast('Нет связи с базой', true); });
+}
+// ЗП: бонус по оплаченным отгрузкам за месяц
+function shipZp(n, month){
+  var rows = [], sum = 0;
+  SHIP.forEach(function(s){
+    if (!s.paid || String(s.paid_at||'').slice(0,7) !== month) return;
+    shipBonus(s, n).rows.forEach(function(x){ rows.push({s: s, o: x.o, share: x.share, b: x.b}); sum += x.b; });
+  });
+  return {sum: Math.round(sum * 100) / 100, rows: rows};
+}
+function shipZpCard(n){
+  var z = shipZp(n, S.month), on = S.month >= SHIP_ZP_FROM;
+  return '<div class="card"><h3 style="display:flex"><span style="flex:1">Бонус по оплаченным отгрузкам · '+MON[+S.month.slice(5,7)-1]+'</span><span>'+money(z.sum)+'</span></h3>'+
+    '<div class="note" style="margin-top:0">'+(on ? 'Бонус считается за отгруженные и оплаченные позиции — в месяц, когда отгрузку отметили «Оплачено». Частичная отгрузка — бонус за её долю заказа.'
+      : 'С декабря 2026 бонус считается так: за отгруженные и оплаченные позиции, в месяц отметки «Оплачено». Сейчас — для сверки, ЗП этого месяца — по старым правилам.')+'</div>'+
+    (z.rows.length ? '<table>'+z.rows.map(function(r){
+      return '<tr><td>'+dmy(r.s.paid_at).slice(0,5)+'</td><td>'+esc(r.o.client)+' <small style="color:var(--mute)">отгрузка №'+r.s.id+(r.share < 0.999 ? ', '+Math.round(r.share*100)+'% заказа' : '')+'</small></td><td class="n">'+money(r.b)+'</td></tr>';
+    }).join('')+'</table>' : '<div class="note">В этом месяце оплаченных отгрузок нет.</div>')+'</div>';
+}
 // ---------- личный кабинет клиента ----------
 // Ссылку клиенту выдаёт менеджер (карточка клиента → «🔗 Кабинет»). Заявки из кабинета приходят сюда, менеджер оформляет их в заказ.
 var CAB_URL = 'https://prav0h.github.io/dentdealer/cabinet.html';
@@ -1389,7 +1452,7 @@ function shipTag(o, i){
   if (!SHIP.length) return '';
   var s = shipInfo(o); if (!s.st) return '';
   return '<button class="tag '+(s.st==='full'?'ok':'warn')+'" onclick="event.stopPropagation();shipView('+i+')" title="Отгрузки по заказу">📦 '+
-    (s.st==='full' ? 'отгружен' : 'частично, осталось '+(s.lines.length - s.nDone)+' поз.')+(s.with.length?' 🔗':'')+'</button>';
+    (s.st==='full' ? 'отгружен' : 'частично, осталось '+(s.lines.length - s.nDone)+' поз.')+(s.with.length?' 🔗':'')+(s.ships.some(function(x){ return !x.paid; }) ? ' · ₽?' : ' · ₽✓')+'</button>';
 }
 // блок «Отгрузки» в окне заказа
 function shipSection(i){
@@ -1406,7 +1469,7 @@ function shipSection(i){
       return '<div class="note" style="border-top:1px solid var(--line);padding-top:6px">Отгрузка №'+x.id+' от '+dmy(x.date)+(x.by_name?' · '+esc(x.by_name):'')+'<br>'+
         mine.map(function(it){ return esc(it.art)+(it.unit?' — '+fmtQ(it.qty)+' '+it.unit:''); }).join(', ')+
         (other.length ? '<br>🔗 вместе с: '+other.map(keyLabel).join('; ') : '')+(x.note ? '<br>'+esc(x.note) : '')+
-        (canShip() ? ' <button class="tag gray" onclick="shipCancel('+x.id+',this)">отменить</button>' : '')+'</div>';
+        shipPayTag(x, i)+(S.me.sales && o.bonus ? ' <small style="color:var(--mute)">бонус '+money(shipBonus(x, o.mgr).sum)+'</small>' : '')+(canShip() && !x.paid ? ' <button class="tag gray" onclick="shipCancel('+x.id+',this)">отменить</button>' : '')+'</div>';
     }).join('');
   }
   if (canShip() && s.st !== 'full') h += '<div class="acts" style="margin-top:8px"><button class="btn sec" onclick="shipDialog('+i+')">📦 Отгрузить'+(s.st==='part'?' остаток':'')+'</button></div>';
@@ -1963,6 +2026,7 @@ function vSalary(){
   var up = (S.data.unpaid||{})[n] || {n:0, sum:0, bonus:0};
   var h = '<div class="stats"><div class="stat"><small>Итого за месяц</small><b>'+(total&&total.value!=null?money(total.value):'—')+'</b></div>'+
     '<div class="stat" style="cursor:pointer" onclick="goUnpaid(\''+esc(n)+'\')"><small>Ждёт оплаты клиентом (за всё время)</small><b>+'+money(up.bonus)+'</b><small>не оплачено заказов: '+up.n+' на '+money(up.sum)+' ›</small></div></div>';
+  h += shipZpCard(n); // бонус по оплаченным отгрузкам
   h += '<div class="card"><h3>'+esc(n)+' · '+MON[+S.month.slice(5,7)-1]+'</h3>'+(s.lines.length?'<table>'+
     s.lines.map(function(l){ return '<tr><td>'+esc(l.label)+'</td><td class="n"><b>'+(l.value==null?'—':l.pct?pct(l.value):money(l.value))+'</b></td></tr>'; }).join('')+'</table>':'<div class="note">В листе «'+esc(n)+'. ЗП» нет расчёта за этот месяц.</div>')+
     '<div class="note">Считается в листе «'+esc(n)+'. ЗП». Оклада нет — только бонусы. Бонус с продаж — по оплаченным заказам и идёт в месяц оплаты: заказ октября, оплаченный в ноябре, — в бонус ноября.</div></div>';
