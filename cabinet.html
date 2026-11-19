@@ -78,6 +78,61 @@ textarea{min-height:70px;resize:vertical}
 .sheet{background:var(--bg);width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
 @media(min-width:760px){.modal{align-items:center}.sheet{border-radius:16px}}
 .sheet h3{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px}
+/* ---------- оформление 2026-11-20: мягкие карточки, приветствие, цвет статуса ---------- */
+html,body{background:linear-gradient(180deg,#eaf2fb 0,#f4f7fb 260px) no-repeat,var(--bg)}
+header{background:linear-gradient(120deg,#164f94 0%,#1A5CAB 45%,#1f86d0 100%);padding:12px 16px 14px;border-radius:0 0 18px 18px;box-shadow:0 6px 20px rgba(26,92,171,.28)}
+.brand{font-size:18px}
+.who{font-size:14px;font-weight:600;color:#fff;opacity:.95}
+.cartbtn{border:0;background:#fff;color:var(--pri);border-radius:999px;padding:7px 14px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;gap:6px}
+.cartbtn span{background:var(--pri);color:#fff;border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 6px}
+h2{font-size:17px;font-weight:700;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+h2:before{content:'';width:4px;height:18px;border-radius:4px;background:linear-gradient(180deg,var(--acc),var(--pri))}
+.card{border:0;border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06)}
+.card[onclick]{transition:transform .12s ease,box-shadow .12s ease}
+.card[onclick]:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(16,24,40,.06),0 10px 24px rgba(16,24,40,.09)}
+.btn{background:linear-gradient(180deg,#2068b8,#1A5CAB);box-shadow:0 2px 6px rgba(26,92,171,.25);transition:filter .12s}
+.btn:hover{filter:brightness(1.06)}
+.btn.sec{background:var(--pri-soft);box-shadow:none}
+.btn.ghost{background:none;box-shadow:none}
+.money{color:#0f3d73}
+.tag{font-weight:500}
+nav{background:rgba(255,255,255,.92);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-top:0;box-shadow:0 -4px 18px rgba(16,24,40,.07)}
+nav button b{width:44px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+nav button.on b{background:var(--pri-soft)}
+.hero{background:linear-gradient(135deg,#ffffff 0%,#f1f7fe 100%);border-radius:18px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06)}
+.hero .hi{font-size:13px;color:var(--mute)}
+.hero .nm{font-size:19px;font-weight:700;margin:2px 0 10px;line-height:1.25}
+.hero .kpi{display:flex;gap:8px;margin-bottom:12px}
+.hero .kpi div{flex:1;min-width:0;background:#fff;border-radius:12px;padding:8px 10px;box-shadow:inset 0 0 0 1px var(--line)}
+.hero .kpi b{display:block;font-size:17px;color:var(--pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .kpi small{color:var(--mute);font-size:12px}
+.hero .acts{display:flex;gap:8px;flex-wrap:wrap}
+.hero .acts .btn{flex:1;min-width:140px}
+.mgr{display:flex;gap:12px;align-items:center}
+.ava{flex:none;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--pri));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
+.ocard{border-left:4px solid #cfd6df}
+.ocard.s-new{border-left-color:var(--pri)}.ocard.s-pack{border-left-color:var(--acc)}.ocard.s-done{border-left-color:var(--ok)}
+.ocard .t b{font-size:15px}
+.ocard .money{font-size:16px}
+.prod{border:0;border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06);padding:12px;transition:transform .12s ease}
+.prod:hover{transform:translateY(-2px)}
+.pic{height:130px;border-radius:12px}
+.pic.b1{background:linear-gradient(135deg,#eef4fb,#dceefe)}.pic.b2{background:linear-gradient(135deg,#f3f0fb,#e6e0fa)}.pic.b3{background:linear-gradient(135deg,#eefaf4,#d9f3e7)}
+.brandtag{font-size:11px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.4px}
+.prod .money{font-size:16px}
+#q,#fq{border-radius:12px;padding:11px 12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.chips button{transition:background .12s,color .12s}
+.total{border-radius:12px;font-size:16px}
+.login .btn{width:100%}
+@media(max-width:420px){.cartbtn .lbl{display:none}}
+html,body{overflow-x:hidden;max-width:100%}
+.hrow{min-width:0}.brand{flex:none}.who{flex:1;min-width:0}.sp{display:none}
+.wrap{width:100%}
+.grid{grid-template-columns:repeat(auto-fill,minmax(min(220px,46%),1fr))}
+@media(max-width:520px){.grid{grid-template-columns:1fr 1fr;gap:8px}.prod{padding:9px}.pic{height:96px}.qrow{flex-wrap:wrap}.qrow .btn{flex:1 1 100%}.brand{font-size:0;gap:0}.brand svg{height:26px}}
+.t{min-width:0}.t b{min-width:0;overflow-wrap:anywhere}
+.tags{min-width:0}.tag{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+
 .doc{white-space:pre-line}
 a{color:var(--pri)}
 </style>
@@ -94,7 +149,7 @@ a{color:var(--pri)}
   <header><div class="hrow">
     <div class="brand"><svg aria-hidden="true" viewBox="12 8 38 52"><polygon fill="#ffffff" points="16.5,30 35.5,12 35.5,18.5 16.5,36.5"/><polygon fill="#7fdcf3" points="26.5,32 45.5,14 45.5,20.5 26.5,38.5"/><polygon fill="#ffffff" points="16.5,49 35.5,31 35.5,37.5 16.5,55.5"/><polygon fill="#7fdcf3" points="26.5,51 45.5,33 45.5,39.5 26.5,57.5"/></svg>Dent Dealer</div>
     <div class="who" id="who"></div><div class="sp"></div>
-    <button class="cartbtn" onclick="go('cart')" title="Новый заказ">🛒 <span id="cartn">0</span></button>
+    <button class="cartbtn" onclick="go('cart')" title="Новый заказ">🛒<span class="lbl" style="background:none;color:inherit;padding:0;min-width:0">Корзина</span><span id="cartn">0</span></button>
   </div></header>
   <div class="wrap" id="view"></div>
   <nav id="nav"></nav>
@@ -244,8 +299,13 @@ function cancelOrder(i){
 }
 function vOrders(){
   var lo = lastOrder();
-  var h = '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" style="flex:1" onclick="newOrder()">＋ Новый заказ</button>'+
-    (lo ? '<button class="btn sec" style="flex:1" onclick="repeatOrder(lastOrder())">🔁 Повторить последний</button>' : '')+'</div>';
+  var os0 = D.orders || [], hr = new Date().getHours(), yr = String(new Date().getFullYear());
+  var open = os0.filter(function(o){ return o.status !== 'Доставлен'; }).length;
+  var ysum = os0.filter(function(o){ return String(o.date||'').slice(0,4) === yr; }).reduce(function(a, o){ return a + (+o.sum||0); }, 0);
+  var h = '<div class="hero"><div class="hi">'+(hr < 12 ? 'Доброе утро' : hr < 18 ? 'Добрый день' : 'Добрый вечер')+'</div><div class="nm">'+esc(D.client.name)+'</div>'+
+    '<div class="kpi"><div><b>'+open+'</b><small>в работе</small></div><div><b>'+os0.length+'</b><small>всего заказов</small></div><div><b>'+money(ysum)+'</b><small>за '+yr+' год</small></div></div>'+
+    '<div class="acts"><button class="btn" onclick="newOrder()">＋ Новый заказ</button>'+
+    (lo ? '<button class="btn sec" onclick="repeatOrder(lastOrder())">🔁 Повторить последний</button>' : '')+'</div></div>';
   h += mgrCard(); var rq =(D.requests||[]).filter(function(r){ return r.status === 'new' || (Date.now() - Date.parse(r.date)) < 30*864e5; });
   if (rq.length) h += '<h2>Ваши заявки</h2>' + rq.map(function(r){
     var s = RQ[r.status] || RQ.new;
@@ -257,7 +317,8 @@ function vOrders(){
   var os = D.orders || [];
   h += '<h2>Заказы</h2>' + (os.length ? os.map(function(o, i){
     var s = shipInfo(o);
-    return '<div class="card" style="cursor:pointer" onclick="if(!event.target.closest(\'a\'))orderView('+i+')"><div class="t"><b>'+dmy(o.date)+(o.inv?' · счёт '+esc(o.inv):'')+'</b><span class="money">'+money(o.sum)+'</span></div>'+
+    var sc = o.status === 'Доставлен' ? 's-done' : o.status === 'Собран' ? 's-pack' : o.status === 'Создан' ? 's-new' : '';
+    return '<div class="card ocard '+sc+'" style="cursor:pointer" onclick="if(!event.target.closest(\'a\'))orderView('+i+')"><div class="t"><b>'+dmy(o.date)+(o.inv?' · счёт '+esc(o.inv):'')+'</b><span class="money">'+money(o.sum)+'</span></div>'+
       '<div class="note">'+esc(o.order)+'</div>'+reqNote(o)+'<div class="tags">'+stTag(o)+(o.paid?'<span class="tag ok">Оплачен</span>':'')+ // «не оплачен» не показываем: безнал в программе считается оплаченным без отметки
       (s.st==='part'?'<span class="tag warn">📦 отгружен частично</span>':s.st==='full'?'<span class="tag ok">📦 отгружен</span>':'')+
       (o.ship?'<span class="tag gray">отгрузка '+dmy(o.ship)+'</span>':'')+(o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
@@ -269,7 +330,7 @@ function vOrders(){
 function mgrCard(){
   var m = D.mgr || {}; if (!m.name) return '';
   var tel = String(m.phone||'').replace(/[^\d+]/g, '');
-  return '<div class="card"><div class="note" style="margin:0">Ваш менеджер</div><div class="t"><b>'+esc(m.name)+'</b></div><div class="tags">'+
+  return '<div class="card"><div class="mgr"><div class="ava">'+esc(String(m.name).charAt(0))+'</div><div><div class="note" style="margin:0">Ваш менеджер</div><b>'+esc(m.name)+'</b></div></div><div class="tags">'+
     (tel?'<a class="tag" href="tel:'+esc(tel)+'">📞 '+esc(m.phone)+'</a><a class="tag" target="_blank" rel="noopener" href="https://wa.me/'+esc(tel.replace(/^\+/, '').replace(/^8/, '7'))+'">WhatsApp</a>':'')+
     (m.email?'<a class="tag" href="mailto:'+esc(m.email)+'">✉ '+esc(m.email)+'</a>':'')+'</div>'+
     (D.disc && D.disc.pct ? '<div class="note">Ваша персональная скидка: <b>'+D.disc.pct+'%</b> — уже учтена в ценах каталога.</div>' : '')+'</div>';
@@ -294,8 +355,9 @@ function drawGrid(){
   $('grid').innerHTML = list.slice(0, SHOW).map(function(p){
     var i = D.price.indexOf(p), pack = p.pp > 1;
     var pr = function(v, d){ return (d < v ? '<span class="old">'+money(v)+'</span>' : '')+'<span class="money">'+money(d)+'</span>'; };
-    return '<div class="prod"><div class="pic">'+(p.img ? '<img loading="lazy" src="'+esc(p.img)+'" alt="">' : ICON)+'</div>'+
-      '<div><b>'+esc(p.art)+'</b>'+(p.promo?' <span class="tag warn">🏷 '+esc(p.promo)+'</span>':'')+'</div><div class="nm">'+esc(p.name)+'</div>'+
+    var bi = BRANDS.indexOf(brandOf(p)) + 1;
+    return '<div class="prod"><div class="pic b'+bi+'">'+(p.img ? '<img loading="lazy" src="'+esc(p.img)+'" alt="">' : ICON)+'</div>'+
+      '<div class="brandtag">'+esc(brandOf(p))+'</div><div><b>'+esc(p.art)+'</b>'+(p.promo?' <span class="tag warn">🏷 '+esc(p.promo)+'</span>':'')+'</div><div class="nm">'+esc(p.name)+'</div>'+
       '<div>'+(pack ? 'уп ('+p.pp+' шт): '+pr(p.pack, p.packD)+'<br><small class="note">шт: '+money(p.oneD)+'</small>' : 'шт: '+pr(p.one, p.oneD))+'</div>'+
       '<div class="qrow"><input id="qq'+i+'" inputmode="numeric" value="1">'+(pack ? '<select id="qu'+i+'"><option>уп</option><option>шт</option></select>' : '<span class="note">шт</span>')+
       '<button class="btn sm" onclick="addCart('+i+')">В корзину</button></div></div>';

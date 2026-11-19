@@ -386,6 +386,8 @@ function sbOrdersStart(){
     }).on('postgres_changes', {event:'*', schema:'public', table:'plans'}, function(){ dbLoadSoon();
     }).on('postgres_changes', {event:'*', schema:'public', table:'reports'}, function(){ dbLoadSoon();
     }).on('postgres_changes', {event:'*', schema:'public', table:'att'}, function(){ dbLoadSoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'zp_marks'}, function(){ dbLoadSoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'shipments'}, function(){ dbLoadSoon(); // бонус по отгрузкам
     }).on('postgres_changes', {event:'*', schema:'public', table:'cab_orders'}, function(p){
       if (p.eventType === 'INSERT' && p.new) toast('🛒 Новая заявка из кабинета: '+p.new.client);
       cabLoad();
@@ -453,7 +455,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 62, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 63, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -655,16 +657,17 @@ var DBREAD = {
   getExam: function(id){ return rpc('dd_exam', {p_id: id}); },
   getKb: function(){ return sbClient().from('meta').select('value').eq('key', 'kb').maybeSingle().then(function(r){ if (r.error || !r.data) throw (r.error || new Error('нет базы знаний')); return r.data.value; }); }
 };
-var DBX = {clients: null, plan: {}, att: {}}, DBX_T = null, DBX_M = {};
+var DBX = {clients: null, plan: {}, att: {}, salary: {}}, DBX_T = null, DBX_M = {};
 function dbLoadSoon(m){ if (m) DBX_M[m] = 1; clearTimeout(DBX_T); DBX_T = setTimeout(function(){ var ms = Object.keys(DBX_M); DBX_M = {}; dbLoad(ms); }, 1200); }
 function dbLoad(months){
   if (!S.sbOn || !sbClient() || !S.me) return;
   months = (months || []).concat(S.month).filter(function(m, i, a){ return m && a.indexOf(m) === i; });
   var jobs = [rpc('dd_clients')];
-  months.forEach(function(m){ jobs.push(rpc('dd_plan', {p_month: m})); jobs.push(rpc('dd_att', {p_month: m})); });
+  months.forEach(function(m){ jobs.push(rpc('dd_plan', {p_month: m})); jobs.push(rpc('dd_att', {p_month: m}));
+    jobs.push(rpc('dd_salary', {p_month: m}).catch(function(e){ console.warn('db salary', e && e.message); return null; })); }); // ЗП — этап 5
   Promise.all(jobs).then(function(r){
     DBX.clients = r[0];
-    months.forEach(function(m, i){ DBX.plan[m] = r[1 + 2*i]; DBX.att[m] = r[2 + 2*i]; });
+    months.forEach(function(m, i){ DBX.plan[m] = r[1 + 3*i]; DBX.att[m] = r[2 + 3*i]; if (r[3 + 3*i]) DBX.salary[m] = r[3 + 3*i]; });
     Object.keys(S.cache).forEach(function(m){ if (S.cache[m]) dbInto(S.cache[m]); });
     if (S.data && S.data.month === S.month) try { store(key(), JSON.stringify(S.data)); } catch(e){}
     if (S.tab !== 'kb' && S.tab !== 'learn' && $('modal').classList.contains('hidden')) softRender();
@@ -676,9 +679,12 @@ function dbInto(d){
   if (DBX.clients && d.clients) d.clients = DBX.clients.map(function(c){ var x = Object.assign({}, c); CFIELDS.forEach(function(k){ if (x[k]==null) x[k]=''; }); x.trade = !!x.trade; x.m = x.m || {}; return x; });
   var p = DBX.plan[d.month]; if (p && d.plan) Object.keys(p).forEach(function(n){ d.plan[n] = p[n]; });
   var a = DBX.att[d.month]; if (a) d.att = a;
-  if (p && d.team) d.team = d.team.map(function(t){
-    var pl = d.plan[t.name]; if (!pl) return t;
-    return Object.assign({}, t, {plan: pl.plan, fact: pl.fact, hasPlan: pl.hasPlan});
+  var z = DBX.salary[d.month]; if (z && d.salary) Object.keys(z).forEach(function(n){ d.salary[n] = z[n]; }); // ЗП — расчёт базы
+  if ((p || z) && d.team) d.team = d.team.map(function(t){
+    var pl = d.plan[t.name], sl = d.salary && d.salary[t.name], x = {};
+    if (p && pl){ x.plan = pl.plan; x.fact = pl.fact; x.hasPlan = pl.hasPlan; }
+    if (z && sl && sl.lines){ var tot = sl.lines.filter(function(l){ return /итого/i.test(l.label); })[0]; if (tot) x.salary = tot.value; }
+    return Object.assign({}, t, x);
   });
 }
 function api(fn){
@@ -2084,8 +2090,11 @@ function vSalary(){
     '<div class="stat" style="cursor:pointer" onclick="goUnpaid(\''+esc(n)+'\')"><small>Ждёт оплаты клиентом (за всё время)</small><b>+'+money(up.bonus)+'</b><small>не оплачено заказов: '+up.n+' на '+money(up.sum)+' ›</small></div></div>';
   h += shipZpCard(n); // бонус по оплаченным отгрузкам
   h += '<div class="card"><h3>'+esc(n)+' · '+MON[+S.month.slice(5,7)-1]+'</h3>'+(s.lines.length?'<table>'+
-    s.lines.map(function(l){ return '<tr><td>'+esc(l.label)+'</td><td class="n"><b>'+(l.value==null?'—':l.pct?pct(l.value):money(l.value))+'</b></td></tr>'; }).join('')+'</table>':'<div class="note">В листе «'+esc(n)+'. ЗП» нет расчёта за этот месяц.</div>')+
-    '<div class="note">Считается в листе «'+esc(n)+'. ЗП». Оклада нет — только бонусы. Бонус с продаж — по оплаченным заказам и идёт в месяц оплаты: заказ октября, оплаченный в ноябре, — в бонус ноября.</div></div>';
+    s.lines.map(function(l){ return '<tr><td>'+esc(l.label)+(l.pct && s.mark!=null ? ' <span class="tag gray">поставлена в программе</span>' : '')+'</td><td class="n"><b>'+(l.value==null?'—':l.pct?pct(l.value):money(l.value))+'</b></td></tr>'; }).join('')+'</table>':'<div class="note">В листе «'+esc(n)+'. ЗП» нет расчёта за этот месяц.</div>')+
+    (S.me.boss && ('qbonus' in s) && s.lines.some(function(l){ return l.pct; }) ? '<button class="btn sec" style="width:100%;margin-top:8px" onclick="markBox(\''+esc(n)+'\')">⭐ Оценка за '+MON[+S.month.slice(5,7)-1].toLowerCase()+(s.mark!=null?': '+pct(s.mark):'')+'</button>' : '')+
+    '<div class="note">'+(s.src ? 'Считает программа. ' : 'Считается в листе «'+esc(n)+'. ЗП». ')+'Оклада нет — только бонусы. '+
+    (S.month >= SHIP_ZP_FROM ? 'Бонус с продаж — за отгруженные и оплаченные позиции, в месяц отметки «Оплачено» (блок выше).' : 'Бонус с продаж — по оплаченным заказам и идёт в месяц оплаты: заказ октября, оплаченный в ноябре, — в бонус ноября.')+
+    (s.qbonus ? ' Дисциплинарный бонус = '+money(s.qbonus)+' × оценка контроля качества.' : '')+'</div></div>';
   h += '<div class="card"><h3>Условия</h3><table>'+s.cond.map(function(c){ return '<tr><td>'+esc(c.label)+'</td><td class="n">'+money(c.value)+'</td></tr>'; }).join('')+'</table>'+
     '<table style="margin-top:8px"><tr><th>Скидка клиенту</th><th class="n">Бонус с продаж</th></tr>'+s.tiers.map(function(t,i){
       var to = s.tiers[i+1] ? ' – '+Math.round(s.tiers[i+1][0]*100-1)+'%' : ' и больше';
@@ -2099,6 +2108,20 @@ function vSalary(){
   v.innerHTML = h;
 }
 
+// оценка контроля качества за месяц — ставит руководитель; дисциплинарный бонус = «Бонус» × оценка
+function markBox(n){
+  var s = S.data.salary[n] || {}, cur = s.mark!=null ? Math.round(s.mark*100) : '';
+  openModal('<h2><span>Оценка · '+esc(n)+' · '+MON[+S.month.slice(5,7)-1]+'</span></h2>'+
+    '<label class="f">Оценка контроля качества, %<input id="mk_v" inputmode="numeric" value="'+cur+'" placeholder="например, 80"></label>'+
+    '<div class="note">Дисциплинарный бонус = '+(s.qbonus ? money(s.qbonus) : '«Бонус» из условий')+' × оценка. Пусто — снять оценку (вернётся значение из листа ЗП).</div>'+
+    '<div class="acts"><button class="btn ghost" onclick="closeModal()">Отмена</button><button class="btn" id="mk_ok">Сохранить</button></div>');
+  $('mk_ok').onclick = function(){
+    var t = $('mk_v').value.trim(), v = t === '' ? null : num(t)/100;
+    if (v !== null && (isNaN(v) || v < 0 || v > 1.5)){ toast('Оценка — от 0 до 150%', true); return; }
+    rpc('dd_mark_set', {p_emp: n, p_month: S.month, p_score: v}).then(function(){ closeModal(); toast(v===null ? 'Оценка снята' : 'Оценка сохранена'); dbLoad(); })
+      .catch(function(e){ toast('Не сохранилось: '+(e && e.message || 'нет связи с базой'), true); });
+  };
+}
 function goUnpaid(n){ if (n && n !== S.me.name && !S.me.all){ toast('Заказы коллег видны только им самим', true); return; } S.of = 'unpaid'; S.unpaidAll = true; S.range = null; Q = ''; go('orders'); }
 
 // ---------- план и отчёт ----------
