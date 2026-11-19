@@ -381,6 +381,11 @@ function sbOrdersStart(){
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBTASK[p.old.id]; }
       else if (p.new && p.new.id) SBTASK[p.new.id] = p.new.o;
       sbApplySoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'orders'}, function(){ dbLoadSoon(); // сводка клиентов и факт плана
+    }).on('postgres_changes', {event:'*', schema:'public', table:'clients'}, function(){ dbLoadSoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'plans'}, function(){ dbLoadSoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'reports'}, function(){ dbLoadSoon();
+    }).on('postgres_changes', {event:'*', schema:'public', table:'att'}, function(){ dbLoadSoon();
     }).on('postgres_changes', {event:'*', schema:'public', table:'cab_orders'}, function(p){
       if (p.eventType === 'INSERT' && p.new) toast('🛒 Новая заявка из кабинета: '+p.new.client);
       cabLoad();
@@ -417,7 +422,7 @@ function sbLoadOrders(){
     var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad(); cabLoad();
     if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
     if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
-    sbApply();
+    sbApply(); dbLoad();
   })
     .catch(function(e){ console.warn('sb orders', e && e.message); });
 }
@@ -448,7 +453,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 61, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 62, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -534,6 +539,7 @@ function sbApply(){
     if (d.orders) d.orders = sbMerge(sbMonth(m), d.orders, m);
     if (SBTASK && d.tasks) d.tasks = sbTasksMerge(d.tasks);
     sbStatsInto(d);
+    dbInto(d);
   });
   if (S.data && S.data.month === S.month) try { store(key(), JSON.stringify(S.data)); } catch(e){}
   if (S.tab === 'orders'){ if (remoteKey()){ QKEY = ''; refreshList(); } else softRender(); }
@@ -598,7 +604,10 @@ function clientKeys(c){ return [c.name, c.legal].concat(String(c.alias||'').spli
 var OPW = {saveOrder:1, setOrderState:1, deleteOrder:1, saveClient:1, addClientNote:1, saveReport:1, savePlan:1, saveTask:1, deleteTask:1,
   checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1, markLesson:1, submitExam:1, gradeExam:1};
 var OPCTX = null;
-var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1}; // главные в базе (этап 3)
+var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1, // главные в базе (этап 3)
+  saveClient:1, addClientNote:1, saveReport:1, savePlan:1, checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1,
+  markLesson:1, submitExam:1, gradeExam:1}; // этап 4
+var BIZERR = /^(Укажите|Сначала|Такая|Напишите|Это не ваш|Создавать|Удалять|Нет доступа|Только)/; // понятные человеку отказы — показываем
 function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
 function opSubmit(fn, args){
   var ctx = OPCTX; OPCTX = null;
@@ -637,14 +646,54 @@ function opPoll(id, t0){
     return opPoll(id, t0);
   });
 }
+// ---------- чтение из базы (этап 4): клиенты, план, табель, история клиента, обучение, база знаний ----------
+function rpc(n, p){ return sbClient().rpc(n, p || {}).then(function(r){ if (r.error) throw r.error; return r.data; }); }
+var DBREAD = {
+  getClient: function(name){ return rpc('dd_client', {p_name: name}); },
+  getLearning: function(){ return rpc('dd_learning'); },
+  getLesson: function(id){ return rpc('dd_lesson', {p_id: id}); },
+  getExam: function(id){ return rpc('dd_exam', {p_id: id}); },
+  getKb: function(){ return sbClient().from('meta').select('value').eq('key', 'kb').maybeSingle().then(function(r){ if (r.error || !r.data) throw (r.error || new Error('нет базы знаний')); return r.data.value; }); }
+};
+var DBX = {clients: null, plan: {}, att: {}}, DBX_T = null, DBX_M = {};
+function dbLoadSoon(m){ if (m) DBX_M[m] = 1; clearTimeout(DBX_T); DBX_T = setTimeout(function(){ var ms = Object.keys(DBX_M); DBX_M = {}; dbLoad(ms); }, 1200); }
+function dbLoad(months){
+  if (!S.sbOn || !sbClient() || !S.me) return;
+  months = (months || []).concat(S.month).filter(function(m, i, a){ return m && a.indexOf(m) === i; });
+  var jobs = [rpc('dd_clients')];
+  months.forEach(function(m){ jobs.push(rpc('dd_plan', {p_month: m})); jobs.push(rpc('dd_att', {p_month: m})); });
+  Promise.all(jobs).then(function(r){
+    DBX.clients = r[0];
+    months.forEach(function(m, i){ DBX.plan[m] = r[1 + 2*i]; DBX.att[m] = r[2 + 2*i]; });
+    Object.keys(S.cache).forEach(function(m){ if (S.cache[m]) dbInto(S.cache[m]); });
+    if (S.data && S.data.month === S.month) try { store(key(), JSON.stringify(S.data)); } catch(e){}
+    if (S.tab !== 'kb' && S.tab !== 'learn' && $('modal').classList.contains('hidden')) softRender();
+  }).catch(function(e){ console.warn('db data', e && e.message); });
+}
+// клиенты, план и табель месяца — из базы (поверх пакета Google)
+function dbInto(d){
+  if (!d) return;
+  if (DBX.clients && d.clients) d.clients = DBX.clients.map(function(c){ var x = Object.assign({}, c); CFIELDS.forEach(function(k){ if (x[k]==null) x[k]=''; }); x.trade = !!x.trade; x.m = x.m || {}; return x; });
+  var p = DBX.plan[d.month]; if (p && d.plan) Object.keys(p).forEach(function(n){ d.plan[n] = p[n]; });
+  var a = DBX.att[d.month]; if (a) d.att = a;
+  if (p && d.team) d.team = d.team.map(function(t){
+    var pl = d.plan[t.name]; if (!pl) return t;
+    return Object.assign({}, t, {plan: pl.plan, fact: pl.fact, hasPlan: pl.hasPlan});
+  });
+}
 function api(fn){
+  var args = Array.prototype.slice.call(arguments, 1);
+  if (DBREAD[fn] && S.sbOn && sbClient()) return DBREAD[fn].apply(null, args).catch(function(e){ console.warn('db read', fn, e && e.message); return apiGas.apply(null, [fn].concat(args)); });
+  return apiGas.apply(null, [fn].concat(args));
+}
+function apiGas(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
   var sub = fn !== 'login' ? opSubmit(fn, args) : null, held = true, rel = function(){ if (held){ held = false; busy(-1); } };
   var call = sub ? sub.then(function(id){ rel(); return opWait(id).catch(function(e){
       // заказы и задачи главные в базе: сбой Google — только копия в таблице не обновилась, сотруднику это не ошибка
       var m = String(e && e.message || e);
-      if (!DBOWN[fn] || /AUTH/.test(m)) throw e;
+      if (!DBOWN[fn] || /AUTH/.test(m) || BIZERR.test(m.replace(/^(Error|Exception):\s*/, ''))) throw e;
       console.warn('таблица не обновилась', fn, m); return null;
     }); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
     : run(fn, fn === 'login' ? [args[0], URLKEY] : [S.token].concat(args));
@@ -674,6 +723,7 @@ function setData(d){
   if (SBTASK && d.tasks) d.tasks = sbTasksMerge((S.cache[d.month] && S.cache[d.month].tasks) || d.tasks); // задачи — из базы
   if (d._ver == null) d._ver = S.ver || 0; // с какой версией данных пришло (ЗП из базы старее — не подменяем)
   sbStatsInto(d);
+  dbInto(d); if (S.sbOn && !DBX.plan[d.month]) dbLoadSoon(d.month); // клиенты, план, табель — из базы
   S.cache[d.month] = d;
   if (d.month === S.month){ S.data = d; try { store(key(), JSON.stringify(d)); } catch(e){} }
 }
