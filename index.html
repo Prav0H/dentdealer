@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <meta charset="utf-8">
 <title>Dent Dealer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
@@ -14,7 +14,8 @@
 <link rel="icon" href="icon-192.png">
 <script>var API_URL = "https://script.google.com/macros/s/AKfycbylW4cLHjeFHA0lyws0izaJTwxmaKQ2k3tNbZoF7-PtzEoHTxPrfKWzGEhNrFB0DpDV/exec";
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="supabase.js"></script>
+<script>if (!window.supabase) document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"><\/script>');</script>
 <script>
 // Быстрое хранилище (Firebase): открытые настройки проекта — это адрес, а не пароль.
 // Сигналы «данные изменились» (Supabase Realtime): публичный адрес и публичный ключ, не пароль.
@@ -447,7 +448,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 58, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 59, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1265,11 +1266,12 @@ function cabList(){
   var list = CABO.filter(function(r){ return r.status === 'new' || Date.now() - Date.parse(r.created_at) < 7*864e5; });
   openModal('<h2><span>Заявки клиентов</span><button class="x" onclick="closeModal()">×</button></h2>'+
     (list.length ? list.map(function(r){
-      var st = r.status === 'new' ? '<span class="tag warn">ждёт</span>' : r.status === 'done' ? '<span class="tag ok">оформлена · '+esc(fio(r.done_by))+'</span>' : '<span class="tag bad">отклонена · '+esc(fio(r.done_by))+'</span>';
-      return '<div class="card"><div class="t"><b>'+esc(r.client)+'</b><span>'+money(r.sum)+'</span></div><div class="note">№'+r.id+' · '+dmy(String(r.created_at).slice(0,10))+' · менеджер '+esc(fio(r.mgr))+'</div>'+
-        '<div>'+(r.items||[]).map(function(i){ return esc(i.art)+' — '+i.qty+' '+i.unit+' <small style="color:var(--mute)">по '+money(i.price)+'</small>'; }).join('<br>')+'</div>'+
+      var st = r.status === 'cancelled' ? '<span class="tag gray">отозвана клиентом</span>' : r.status === 'new' ? '<span class="tag warn">ждёт</span>' : r.status === 'done' ? '<span class="tag ok">оформлена · '+esc(fio(r.done_by))+'</span>' : '<span class="tag bad">отклонена · '+esc(fio(r.done_by))+'</span>';
+      var ri = r.ref_info || {};
+      return '<div class="card"><div class="t"><b>'+esc(r.client)+(r.kind==='change'?' · ✎ изменить заказ от '+dmy(ri.date):r.kind==='cancel'?' · ✖ отменить заказ от '+dmy(ri.date):'')+'</b><span>'+(r.kind==='cancel'?'':money(r.sum))+'</span></div><div class="note">№'+r.id+' · '+dmy(String(r.created_at).slice(0,10))+' · менеджер '+esc(fio(r.mgr))+'</div>'+
+        (r.kind && r.kind!=='new' ? '<div class="note">Сейчас в заказе: '+esc(ri.order||'')+' · '+money(ri.sum)+'</div>'+(r.kind==='change'?'<div class="note" style="margin-bottom:2px">Клиент просит так:</div>':'') : '')+'<div>'+(r.items||[]).map(function(i){ return esc(i.art)+' — '+i.qty+' '+i.unit+' <small style="color:var(--mute)">по '+money(i.price)+'</small>'; }).join('<br>')+'</div>'+
         (r.addr ? '<div class="note">Адрес: '+esc(r.addr)+'</div>' : '')+(r.comment ? '<div class="note">Комментарий клиента: '+esc(r.comment)+'</div>' : '')+(r.note ? '<div class="note">Ответ: '+esc(r.note)+'</div>' : '')+'<div class="tags">'+st+'</div>'+
-        (r.status === 'new' && S.me.edit ? '<div class="acts"><button class="btn ghost" onclick="cabReject('+r.id+',this)">Отклонить</button><button class="btn" onclick="cabMake('+r.id+')">Оформить заказ</button></div>' : '')+'</div>';
+        (r.status === 'new' && S.me.edit ? '<div class="acts"><button class="btn ghost" onclick="cabReject('+r.id+',this)">Отклонить</button>'+(r.kind==='change'?'<button class="btn" onclick="cabApply('+r.id+')">Применить изменения</button>':r.kind==='cancel'?'<button class="btn" onclick="cabCancelOrder('+r.id+')">Удалить заказ</button>':'<button class="btn" onclick="cabMake('+r.id+')">Оформить заказ</button>')+'</div>' : '')+'</div>';
     }).join('') : '<div class="card empty">Заявок нет</div>'));
 }
 function cabDone(id, status, note){
@@ -1304,6 +1306,46 @@ function cabMake(id){
   toast('Проверьте заказ и нажмите «Сохранить»');
 }
 
+// заказ из запроса клиента: «дата|менеджер|клиент#счёт»
+function cabFind(r){
+  var p = String(r.ref||'').split('#'), inv = p.length > 1 ? p.slice(1).join('#') : null, ri = r.ref_info || {};
+  var c = (S.allOrders || S.orders || []).filter(function(o){ return okey(o) === p[0] && (inv === null || (o.inv||'') === inv); });
+  return c.filter(function(o){ return o.order === ri.order; })[0] || c[0] || null;
+}
+// запрос клиента изменить оформленный заказ: открыть заказ с новыми товарами; после «Сохранить» запрос = выполнен
+function cabApply(id){
+  var r = CABO.filter(function(x){ return x.id === id; })[0]; if (!r) return;
+  var o = cabFind(r);
+  if (!o){ toast('Заказ не найден — возможно, его уже изменили. Откройте его вручную.', true); return; }
+  closeModal();
+  var idx = S.orders.indexOf(o); if (idx < 0){ S.orders.push(o); idx = S.orders.length - 1; }
+  editOrder(idx);
+  F.cabReq = id; F.lines = []; F.extra = ''; F.base0 = (F.sum||0) - (F.dlv||0); // старый состав заменяется целиком
+  (r.items||[]).forEach(function(it){
+    var p = S.price.filter(function(x){ return x.art === it.art; })[0];
+    var nl = p ? {art:p.art, name:p.name, eur:p.eur, eurPack:p.eurPack, rub:p.rub, perPack:p.perPack, unit: it.unit === 'уп' && (p.perPack||1) > 1 ? 'уп' : 'шт', qty: +it.qty || 1}
+               : {art: it.art, name: 'своя позиция', custom: true, eur: 0, eurPack: 0, rub: +it.price || 0, perPack: 1, unit: 'шт', qty: +it.qty || 1};
+    if (p){ promoApply(nl); cabArt(nl); }
+    F.lines.push(nl);
+  });
+  if (r.addr && $('f_addr')) $('f_addr').value = r.addr;
+  if ($('f_comment')) $('f_comment').value = ($('f_comment').value ? $('f_comment').value + '\n' : '') + 'Изменено по запросу клиента (заявка №'+id+')'+(r.comment ? ': '+r.comment : '');
+  drawLines();
+  toast('Проверьте новый состав и нажмите «Сохранить»');
+}
+// запрос клиента отменить заказ: удалить заказ (с подтверждением)
+function cabCancelOrder(id){
+  var r = CABO.filter(function(x){ return x.id === id; })[0]; if (!r) return;
+  var o = cabFind(r);
+  if (!o){ toast('Заказ не найден — возможно, его уже удалили', true); cabDone(id, 'done', 'Заказ отменён'); return; }
+  confirmBox('Удалить заказ «'+o.client+'» от '+dmy(o.date)+' на '+money(o.sum)+' по просьбе клиента? Строка удалится из таблицы.', function(){
+    S.data.orders = (S.data.orders||[]).filter(function(x){ return x !== o; });
+    if (o.row) SBGONE[o.sheet+':'+o.row] = Date.now();
+    closeModal(); render(); toast('Заказ удалён, клиент увидит, что отмена принята');
+    afterSave(o, function(){ return bg('deleteOrder', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}}); });
+    cabDone(id, 'done', 'Заказ отменён');
+  });
+}
 // база знаний: какие папки видят клиенты
 function cabKbBtn(){ var on = CABKB.indexOf(S.kbf) >= 0; return '<button class="btn '+(on?'sec':'ghost')+' sm" onclick="cabKbToggle()" title="Показывать эту папку в кабинете клиентов">'+(on?'👁 Видят клиенты':'🙈 Клиентам не видно')+'</button>'; }
 function cabKbToggle(){

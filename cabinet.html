@@ -10,8 +10,9 @@
 <meta name="apple-mobile-web-app-title" content="Dent Dealer">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<script src="supabase.js"></script>
+<script>if (!window.supabase) document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"><\/script>');</script>
 <style>
 :root{
   --bg:#f4f7fb;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;
@@ -52,6 +53,7 @@ textarea{min-height:70px;resize:vertical}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:6px 0 2px;scrollbar-width:none}
 .chips button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
 .chips button.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.chips.brands button{font-weight:600;padding:7px 14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
 .prod{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px}
 .pic{height:120px;border-radius:10px;background:linear-gradient(135deg,#eef4fb,#e1f6fc);display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -164,7 +166,12 @@ function shipInfo(o){
   lines.forEach(function(l){ var a = l.art.toLowerCase()+'|'+l.unit, d = Math.min(l.qty, done[a]||0); l.done = d; done[a] = (done[a]||0) - d; l.left = Math.max(0, l.qty - d); });
   return { ships: ships, lines: lines, st: !ships.length ? '' : lines.every(function(l){ return !l.left; }) ? 'full' : 'part' };
 }
-var RQ = {new: ['warn', 'Ждёт подтверждения менеджера'], done: ['ok', 'Принят менеджером'], rejected: ['bad', 'Отклонён']};
+var RQ = {new: ['warn', 'Ждёт подтверждения менеджера'], done: ['ok', 'Принято менеджером'], rejected: ['bad', 'Отклонено менеджером'], cancelled: ['gray', 'Отменена вами']};
+function rqTitle(r){ var i = r.ref_info || {}; return r.kind === 'change' ? 'Изменение заказа от '+dmy(i.date) : r.kind === 'cancel' ? 'Отмена заказа от '+dmy(i.date) : 'Заявка №'+r.id; }
+function oref(o){ return o.k + '#' + (o.inv||''); } // заказ = «дата|менеджер|клиент#счёт» (в один день у клиента бывает два заказа)
+function pendingFor(o){ var k = oref(o); return (D.requests||[]).filter(function(r){ return r.ref === k; })[0] || null; } // последний запрос по заказу
+var EDIT = null; // что отправляет форма: {id} — правка своей заявки; {ref, date} — изменение оформленного заказа
+function rpcErr(r){ toast(/LINK/.test(r.error.message) ? 'Ссылка больше не действует — попросите у менеджера новую' : r.error.message, true); }
 // заказ → позиции из прайса (для «Повторить»); что не нашлось в прайсе — пропускаем
 function toCart(lines){
   var out = [], miss = [];
@@ -186,6 +193,13 @@ function lastOrder(){
   if (b && (!a || String(b.date).slice(0,10) >= a.date)) return b;
   return a || null;
 }
+function reqNote(o){
+  var r = pendingFor(o); if (!r) return '';
+  var s = RQ[r.status] || RQ.new, what = r.kind === 'cancel' ? 'Запрос на отмену' : 'Запрос на изменение';
+  if (r.status === 'done') return '<div class="note">✓ '+what+' принят менеджером.</div>';
+  if (r.status === 'cancelled') return '';
+  return '<div class="card" style="background:var('+(r.status==='rejected'?'--bad-soft':'--warn-soft')+');border-color:transparent;margin:8px 0"><b>'+what+'</b>: '+s[1].toLowerCase()+(r.note ? '<br>Причина: '+esc(r.note) : '')+'</div>';
+}
 function orderView(i){
   var o = D.orders[i], s = shipInfo(o);
   openModal('<h3><span>Заказ от '+dmy(o.date)+'</span><button class="x" onclick="closeModal()">×</button></h3>'+
@@ -201,6 +215,8 @@ function orderView(i){
         (s.ships.length ? ' <small style="color:'+(l.left?'var(--warn)':'var(--ok)')+'">'+(l.left ? (l.unit ? 'отгружено '+l.done : 'не отгружено') : '✓ отгружено')+'</small>' : '')+'</div></div>';
     }).join('')+'</div>'+
     (s.ships.length ? '<div class="note">Отгрузки: '+s.ships.map(function(x){ return '№'+x.id+' от '+dmy(x.date); }).join(', ')+'</div>' : '')+
+    reqNote(o)+
+    (o.status !== 'Доставлен' && !(pendingFor(o) && pendingFor(o).status === 'new') ? '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn sec" style="flex:1" onclick="changeOrder('+i+')">✎ Изменить заказ</button><button class="btn ghost" style="flex:1" onclick="cancelOrder('+i+')">Отменить заказ</button></div><div id="cancel_box"></div>' : '')+
     '<button class="btn" style="width:100%;margin-top:8px" onclick="repeatOrder(D.orders['+i+'])">🔁 Повторить этот заказ</button>');
 }
 function reqView(j){
@@ -209,16 +225,31 @@ function reqView(j){
     '<div class="card">'+r.items.map(function(i){ return '<div class="line"><div class="nm"><b>'+esc(i.art)+'</b><div class="note" style="margin:0">'+esc(i.name||'')+'</div></div><div style="white-space:nowrap">'+i.qty+' '+i.unit+' × '+money(i.price)+'</div></div>'; }).join('')+
     '<div class="total"><span>Итого</span><span>'+money(r.sum)+'</span></div></div>'+
     (r.addr ? '<div class="note">Адрес: '+esc(r.addr)+'</div>' : '')+(r.comment ? '<div class="note">Комментарий: '+esc(r.comment)+'</div>' : '')+(r.note ? '<div class="note">Ответ менеджера: '+esc(r.note)+'</div>' : '')+
-    '<button class="btn" style="width:100%;margin-top:8px" onclick="repeatOrder(D.requests['+j+'])">🔁 Повторить</button>');
+    (r.status === 'new' && r.kind !== 'cancel' ? '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn sec" style="flex:1" onclick="editReq('+j+')">✎ Изменить</button><button class="btn ghost" style="flex:1" onclick="cancelReq('+j+',this)">Отменить заявку</button></div>' : '')+
+    (r.status === 'new' && r.kind === 'cancel' ? '<button class="btn ghost" style="width:100%;margin-top:8px" onclick="cancelReq('+j+',this)">Отозвать запрос на отмену</button>' : '')+
+    (r.items.length ? '<button class="btn" style="width:100%;margin-top:8px" onclick="repeatOrder(D.requests['+j+'])">🔁 Повторить</button>' : ''));
+}
+function editReq(j){ var r = D.requests[j]; CART = toCart(r.items).items; saveCart(); FADDR = r.addr || null; FCMT = r.comment || ''; EDIT = {id: r.id}; closeModal(); go('cart'); }
+function cancelReq(j, b){
+  if (!b.dataset.sure){ b.dataset.sure = 1; b.textContent = 'Точно отменить?'; return; }
+  SB.rpc('cab_order_cancel', {p_tok: TOK, p_id: D.requests[j].id}).then(function(r){ if (r.error){ rpcErr(r); return; } closeModal(); toast('Заявка отменена'); load(); });
+}
+// оформленный заказ: попросить изменить или отменить — решает менеджер
+function changeOrder(i){ var o = D.orders[i]; CART = toCart(shipLines(o)).items; saveCart(); FADDR = o.addr || null; FCMT = ''; EDIT = {ref: oref(o), date: o.date}; closeModal(); go('cart'); }
+function cancelOrder(i){
+  var box = $('cancel_box');
+  if (!box.innerHTML){ box.innerHTML = '<textarea id="cancel_why" placeholder="Причина (необязательно)"></textarea><button class="btn" style="width:100%;margin-top:6px" onclick="cancelOrder('+i+')">Отправить запрос на отмену</button>'; return; }
+  SB.rpc('cab_order_change', {p_tok: TOK, p_ref: oref(D.orders[i]), p_kind: 'cancel', p_items: [], p_comment: ($('cancel_why').value||'').trim(), p_addr: ''}).then(function(r){
+    if (r.error){ rpcErr(r); return; } closeModal(); toast('Запрос на отмену отправлен менеджеру'); load(); });
 }
 function vOrders(){
   var lo = lastOrder();
   var h = '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" style="flex:1" onclick="newOrder()">＋ Новый заказ</button>'+
     (lo ? '<button class="btn sec" style="flex:1" onclick="repeatOrder(lastOrder())">🔁 Повторить последний</button>' : '')+'</div>';
-  h += mgrCard(); var rq =(D.requests||[]).filter(function(r){ return r.status === 'new' || (Date.now() - Date.parse(r.date)) < 14*864e5; });
+  h += mgrCard(); var rq =(D.requests||[]).filter(function(r){ return r.status === 'new' || (Date.now() - Date.parse(r.date)) < 30*864e5; });
   if (rq.length) h += '<h2>Ваши заявки</h2>' + rq.map(function(r){
     var s = RQ[r.status] || RQ.new;
-    return '<div class="card" style="cursor:pointer" onclick="reqView('+D.requests.indexOf(r)+')"><div class="t"><b>Заявка №'+r.id+'</b><span class="money">'+money(r.sum)+'</span></div><div class="note">'+dmy(String(r.date).slice(0,10))+' · '+
+    return '<div class="card" style="cursor:pointer" onclick="reqView('+D.requests.indexOf(r)+')"><div class="t"><b>'+rqTitle(r)+'</b><span class="money">'+(r.items.length ? money(r.sum) : '')+'</span></div><div class="note">'+dmy(String(r.date).slice(0,10))+' · '+
       r.items.map(function(i){ return esc(i.art)+' — '+i.qty+' '+i.unit; }).join(', ')+'</div>'+
       (r.comment ? '<div class="note">Комментарий: '+esc(r.comment)+'</div>' : '')+'<div class="tags"><span class="tag '+s[0]+'">'+s[1]+'</span></div>'+
       (r.note ? '<div class="note">Ответ менеджера: '+esc(r.note)+'</div>' : '')+'</div>';
@@ -227,7 +258,7 @@ function vOrders(){
   h += '<h2>Заказы</h2>' + (os.length ? os.map(function(o, i){
     var s = shipInfo(o);
     return '<div class="card" style="cursor:pointer" onclick="if(!event.target.closest(\'a\'))orderView('+i+')"><div class="t"><b>'+dmy(o.date)+(o.inv?' · счёт '+esc(o.inv):'')+'</b><span class="money">'+money(o.sum)+'</span></div>'+
-      '<div class="note">'+esc(o.order)+'</div><div class="tags">'+stTag(o)+(o.paid?'<span class="tag ok">Оплачен</span>':'')+ // «не оплачен» не показываем: безнал в программе считается оплаченным без отметки
+      '<div class="note">'+esc(o.order)+'</div>'+reqNote(o)+'<div class="tags">'+stTag(o)+(o.paid?'<span class="tag ok">Оплачен</span>':'')+ // «не оплачен» не показываем: безнал в программе считается оплаченным без отметки
       (s.st==='part'?'<span class="tag warn">📦 отгружен частично</span>':s.st==='full'?'<span class="tag ok">📦 отгружен</span>':'')+
       (o.ship?'<span class="tag gray">отгрузка '+dmy(o.ship)+'</span>':'')+(o.deliv?'<span class="tag gray">доставка '+dmy(o.deliv)+'</span>':'')+
       (o.cdek?'<a class="tag" target="_blank" rel="noopener" href="https://www.cdek.ru/ru/tracking?order_id='+encodeURIComponent(o.cdek)+'">СДЭК '+esc(o.cdek)+'</a>':'')+'</div>'+
@@ -245,16 +276,21 @@ function mgrCard(){
 }
 
 // ---------- каталог ----------
+// три производителя: Medipac (шовный материал), THE Graft (Purgo Biologics), MyGis (MSBIO)
+var BRANDS = ['Medipac', 'THE Graft (Purgo)', 'MyGis (MSBIO)'], BR = '';
+function brandOf(p){ var g = String(p.group||''); return /graft|purgo/i.test(g) ? BRANDS[1] : /mygis|msbio/i.test(g) ? BRANDS[2] : BRANDS[0]; }
 function vShop(){
-  var groups = []; (D.price||[]).forEach(function(p){ if (p.group && groups.indexOf(p.group) < 0) groups.push(p.group); });
-  return '<h2>Каталог</h2><input id="q" placeholder="Поиск: артикул, название, размер…" autocomplete="off">'+
+  var groups = []; (D.price||[]).forEach(function(p){ if (p.group && (!BR || brandOf(p) === BR) && groups.indexOf(p.group) < 0) groups.push(p.group); });
+  var has = BRANDS.filter(function(b){ return (D.price||[]).some(function(p){ return brandOf(p) === b; }); });
+  return '<h2>Каталог</h2><div class="chips brands"><button class="'+(BR?'':'on')+'" onclick="BR=\'\';GRP=\'\';SHOW=60;render()">Все</button>'+has.map(function(b){ return '<button class="'+(BR===b?'on':'')+'" onclick="BR=this.dataset.b;GRP=\'\';SHOW=60;render()" data-b="'+esc(b)+'">'+esc(b)+'</button>'; }).join('')+'</div>'+
+    '<input id="q" placeholder="Поиск: артикул, название, размер…" autocomplete="off">'+
     '<div class="chips"><button class="'+(GRP?'':'on')+'" onclick="GRP=\'\';SHOW=60;render()">Все</button>'+groups.map(function(g){ return '<button class="'+(GRP===g?'on':'')+'" onclick="GRP=this.dataset.g;SHOW=60;render()" data-g="'+esc(g)+'">'+esc(g)+'</button>'; }).join('')+'</div>'+
     '<div class="note">Цены в рублях, с вашей скидкой. Добавьте товары в корзину и отправьте заказ — менеджер подтвердит наличие и сроки.</div><div id="grid" class="grid"></div><div id="more"></div>';
 }
 function hay(p){ return p._h || (p._h = [p.art, p.name, p.group, p.mat, p.analog].join(' ').toLowerCase().replace(/ё/g, 'е')); }
 function drawGrid(){
   var words = Q.toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean);
-  var list = (D.price||[]).filter(function(p){ return (!GRP || p.group === GRP) && words.every(function(w){ return hay(p).indexOf(w) >= 0; }); });
+  var list = (D.price||[]).filter(function(p){ return (!BR || brandOf(p) === BR) && (!GRP || p.group === GRP) && words.every(function(w){ return hay(p).indexOf(w) >= 0; }); });
   $('grid').innerHTML = list.slice(0, SHOW).map(function(p){
     var i = D.price.indexOf(p), pack = p.pp > 1;
     var pr = function(v, d){ return (d < v ? '<span class="old">'+money(v)+'</span>' : '')+'<span class="money">'+money(d)+'</span>'; };
@@ -277,12 +313,13 @@ function addCart(i){
 function priceOf(c){ var p = (D.price||[]).filter(function(x){ return x.art === c.art; })[0]; return p ? (c.unit === 'уп' ? p.packD : p.oneD) : 0; }
 // «Новый заказ» (он же корзина): поиск товара прямо здесь, количество, адрес, комментарий → «Заказать»
 var FADDR = null, FCMT = '';
-function newOrder(){ go('cart'); setTimeout(function(){ var f = $('fq'); if (f) f.focus(); }, 50); }
+function newOrder(){ if (EDIT){ EDIT = null; CART = []; saveCart(); } go('cart'); setTimeout(function(){ var f = $('fq'); if (f) f.focus(); }, 50); }
 function vCart(){
   CART = CART.filter(function(c){ return (D.price||[]).some(function(x){ return x.art === c.art; }); }); saveCart();
   if (FADDR === null) FADDR = (D.client && D.client.addr) || '';
   var total = CART.reduce(function(s, c){ return s + priceOf(c) * c.qty; }, 0);
-  return '<h2>Новый заказ</h2>'+
+  var title = EDIT && EDIT.id ? 'Изменение заявки' : EDIT && EDIT.ref ? 'Изменение заказа от '+dmy(EDIT.date) : 'Новый заказ';
+  return '<h2>'+title+'</h2>'+(EDIT ? '<div class="note">'+(EDIT.ref ? 'Исправьте товары и количество — изменения уйдут менеджеру на подтверждение.' : 'Заявка ещё у менеджера — изменения сразу заменят её.')+' <a href="#" onclick="EDIT=null;CART=[];saveCart();render();return false">Не менять</a></div>' : '')+
     '<div class="card"><input id="fq" placeholder="Добавить товар: артикул, название, размер…" autocomplete="off" oninput="formSug()"><div id="fsug"></div>'+
     (CART.length ? CART.map(function(c, j){
       var p = D.price.filter(function(x){ return x.art === c.art; })[0];
@@ -295,7 +332,7 @@ function vCart(){
     '<label class="note">Адрес доставки</label><textarea id="faddr" oninput="FADDR=this.value" placeholder="Адрес, контакт, удобное время">'+esc(FADDR)+'</textarea>'+
     '<label class="note">Комментарий</label><textarea id="cmt" oninput="FCMT=this.value" placeholder="Сроки, пожелания">'+esc(FCMT)+'</textarea>'+
     '<div class="note">Заказ уйдёт вашему менеджеру. Он подтвердит наличие и сроки, после этого заказ появится в разделе «Заказы».</div>'+
-    '<button class="btn" id="send" style="width:100%;margin-top:8px"'+(CART.length?'':' disabled')+' onclick="sendOrder()">Заказать</button>';
+    '<button class="btn" id="send" style="width:100%;margin-top:8px"'+(CART.length?'':' disabled')+' onclick="sendOrder()">'+(EDIT ? 'Отправить изменения' : 'Заказать')+'</button>';
 }
 function formSug(){
   var words = $('fq').value.toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean);
@@ -314,9 +351,14 @@ function sendOrder(){
   var items = CART.filter(function(c){ return c.qty > 0; });
   if (!items.length){ toast('Добавьте товары', true); return; }
   $('send').disabled = true;
-  SB.rpc('cab_order_add', {p_tok: TOK, p_items: items, p_comment: ($('cmt').value || '').trim(), p_addr: ($('faddr').value || '').trim()}).then(function(r){
-    if (r.error){ $('send').disabled = false; toast(/LINK/.test(r.error.message) ? 'Ссылка больше не действует — попросите у менеджера новую' : r.error.message, true); return; }
-    CART = []; FCMT = ''; FADDR = null; saveCart(); toast('Заказ принят — менеджер подтвердит наличие и сроки'); TAB = 'orders'; load();
+  var cm = ($('cmt').value || '').trim(), ad = ($('faddr').value || '').trim();
+  var call = EDIT && EDIT.id ? SB.rpc('cab_order_edit', {p_tok: TOK, p_id: EDIT.id, p_items: items, p_comment: cm, p_addr: ad})
+    : EDIT && EDIT.ref ? SB.rpc('cab_order_change', {p_tok: TOK, p_ref: EDIT.ref, p_kind: 'change', p_items: items, p_comment: cm, p_addr: ad})
+    : SB.rpc('cab_order_add', {p_tok: TOK, p_items: items, p_comment: cm, p_addr: ad});
+  call.then(function(r){
+    if (r.error){ $('send').disabled = false; rpcErr(r); return; }
+    var msg = EDIT ? (EDIT.ref ? 'Изменения отправлены менеджеру' : 'Заявка изменена') : 'Заказ принят — менеджер подтвердит наличие и сроки';
+    CART = []; FCMT = ''; FADDR = null; EDIT = null; saveCart(); toast(msg); TAB = 'orders'; load();
   }, function(){ $('send').disabled = false; toast('Нет связи. Попробуйте ещё раз.', true); });
 }
 
@@ -345,6 +387,7 @@ function openDoc(i){
 }
 
 if (TOK) load(); else show('nolink');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 </script>
 </body>
 </html>
