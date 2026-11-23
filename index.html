@@ -455,7 +455,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 64, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 65, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -499,7 +499,8 @@ function sbMerge(list, local, month){
     if (!courier() && String(x.date||'').slice(0,7) !== month) return;
     if (x.row){ out.unshift(x); return; }
     // новый заказ ещё записывается: если его копия из базы уже пришла — показываем один
-    var i = out.findIndex(function(o){ return !o.saving && !o._t && o.mgr === x.mgr && o.client === x.client && o.date === x.date; });
+    // своя копия — по временному номеру заказа (_k); по «дата|менеджер|клиент» нельзя: у клиента в день бывает несколько заказов
+    var i = out.findIndex(function(o){ return x._k ? o._k === x._k : (!o.saving && !o._t && o.mgr === x.mgr && o.client === x.client && o.date === x.date); });
     if (i >= 0) out[i] = x; else out.unshift(x);
   });
   return out;
