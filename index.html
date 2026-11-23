@@ -144,13 +144,13 @@ button.tag{border:0;cursor:pointer;font:inherit;font-size:12px}
 .menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:8px;cursor:pointer}
 .menu button:hover,.menu button.on{background:var(--pri-soft);color:var(--pri)}
 .tw{overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;max-height:calc(100vh - 230px)}
-table.ot{border-collapse:collapse;width:100%;font-size:13px;min-width:1180px}
-.ot th{position:sticky;top:0;z-index:1;background:#f6f7f9;text-align:left;padding:8px 10px;font-weight:600;color:var(--mute);white-space:nowrap;border-bottom:1px solid var(--line)}
-.ot td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.ot{border-collapse:collapse;width:100%;font-size:12.5px}
+.ot th{position:sticky;top:0;z-index:1;background:#f6f7f9;text-align:left;padding:7px 6px;font-weight:600;color:var(--mute);white-space:normal;line-height:1.2;border-bottom:1px solid var(--line)}
+.ot td{padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .ot tbody tr{cursor:pointer}.ot tbody tr:hover td{background:var(--pri-soft)}.ot tr.saving td{opacity:.6}
 .ot .num{text-align:right;white-space:nowrap}.ot .tag{white-space:nowrap}
-body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:nth-child(5) .cl{min-width:160px}.ot td:nth-child(3){min-width:150px}
-.ot .cl{max-width:230px;white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:nth-child(5) .cl{min-width:110px}.ot td:nth-child(3){min-width:90px}.ot .tg{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.ot .cl{max-width:200px;white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .seg{display:flex;background:#e9edf3;border-radius:10px;padding:3px;margin:12px 0}
 .seg button{flex:1;border:0;background:none;padding:8px;border-radius:8px;cursor:pointer;color:var(--mute);font-weight:600}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -167,10 +167,10 @@ body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:
 .kmove.main button.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent;font-weight:600}
 .kmove.main button{color:var(--ink)}
 .ot td.ed{cursor:pointer}
-.ot th .tf{display:block;width:100%;min-width:56px;margin-top:4px;font:inherit;font-weight:400;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.ot th .tf{display:block;width:100%;min-width:40px;margin-top:4px;font:inherit;font-weight:400;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
 .ot th .tf.on{border-color:var(--pri);background:var(--pri-soft)}
 .ot th.srt{cursor:pointer;user-select:none}.ot th.srt:hover{color:var(--pri)}
-.ot th button.tf{text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.ot th button.tf{text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
 .menu.fm{max-height:340px;overflow:auto;min-width:200px;max-width:320px;padding:6px}
 .fm label{display:flex;gap:8px;align-items:flex-start;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px}
 .fm label input[type=checkbox]{width:16px;height:16px;flex:none;margin:1px 0 0;padding:0}.fm label span{flex:1;text-align:left;white-space:normal}
@@ -455,7 +455,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 63, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 64, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -1007,7 +1007,7 @@ function byAdded(list){
   });
 }
 var TCOLS = [['date','Дата','d'],['mgr','Менеджер'],['client','Клиент'],['addr','Адрес'],['order','Заказ'],['disc','Скидка'],['sum','Сумма'],['trade','Торг.'],
-  ['inv','Счёт'],['cash','Нал/безнал'],['status','Статус'],['ship','Отгрузка','d'],['deliv','Доставка','d'],['paid','Оплачен']];
+  ['inv','Счёт'],['cash','Нал/ безнал'],['status','Статус'],['ship','Отгрузка','d'],['deliv','Доставка','d'],['paid','Оплачен']];
 var EMPTY = '— пусто';
 var TNOF = {addr:1, order:1, inv:1};   // у этих столбцов фильтра нет
 var TRANGE = {disc:1, sum:1};         // фильтр «от … до …»
@@ -1115,11 +1115,12 @@ function orderTable(list){
       : '<tr><td colspan="'+TCOLS.length+'" class="empty">Заказов нет</td></tr>')+
     '</tbody></table></div>'+(ed?'<div class="note">Нажмите на ячейку, чтобы изменить значение; Enter — сохранить, Esc — отменить. Клиент открывает заказ целиком. Нажмите на заголовок с датой, чтобы отсортировать.</div>':'');
 }
+function dmy2(s){ return s ? s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(2,4) : ''; } // 23.11.26 — короче для таблицы
 function orderRow(o, i){
   var ed = S.me.edit;
   var td = function(h, cls, f){ return '<td'+(cls?' class="'+cls+(ed&&f?' ed':'')+'"':(ed&&f?' class="ed"':''))+(ed&&f?' onclick="cellEdit(event,'+i+',\''+f+'\')" title="Нажмите, чтобы изменить"':'')+'>'+h+'</td>'; };
-  return td(dmy(o.date),'num','date')+td(esc(o.mgr),'','mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','','addr')+td('<div class="cl">'+esc(o.order)+'</div>','','order')+
-    td(o.disc?pct(o.disc):'','num','disc')+td(money(o.sum),'num','sum')+td(o.trade?'да':'','','trade')+td(esc(o.inv),'','inv')+td(esc(o.cash),'','cash')+td(stBtn(o,i)+shipTag(o,i))+td(dmy(o.ship),'num','ship')+td(dmy(o.deliv),'num','deliv')+td(paidBtn(o,i));
+  return td(dmy2(o.date),'num','date')+td(esc(o.mgr),'','mgr')+'<td'+(ed?' class="ed" onclick="editOrder('+i+')" title="Открыть заказ"':'')+'><b>'+esc(o.client)+'</b></td>'+td('<div class="cl">'+esc(o.addr)+'</div>','','addr')+td('<div class="cl">'+esc(o.order)+'</div>','','order')+
+    td(o.disc?pct(o.disc):'','num','disc')+td(money(o.sum),'num','sum')+td(o.trade?'да':'','','trade')+td(esc(o.inv),'','inv')+td(esc(o.cash),'','cash')+td('<div class="tg">'+stBtn(o,i)+shipTag(o,i,1)+'</div>')+td(dmy2(o.ship),'num','ship')+td(dmy2(o.deliv),'num','deliv')+td(paidBtn(o,i));
 }
 // Перерисовать одну строку таблицы (или карточку) — остальное на экране не трогаем.
 function redrawOrder(o){
@@ -1380,7 +1381,9 @@ function cabDiscSave(){
 function cabDiscTag(c){ var d = CABD[c.name]; return d && (d.pct || Object.keys(d.arts||{}).length) ? '<span class="tag ok">персональная '+(d.pct ? d.pct+'%' : '')+(Object.keys(d.arts||{}).length ? ' + на '+Object.keys(d.arts).length+' тов.' : '')+'</span>' : ''; }
 
 // заявки клиентов — полоса над списком заказов
-function cabNew(){ return CABO.filter(function(r){ return r.status === 'new'; }); }
+// заявки видит только менеджер клиента (и его ассистент) — бухгалтер, офис-менеджер и руководитель чужих заявок не видят
+function cabMine(r){ return r.mgr === S.me.name || (!!S.me.assist && r.mgr === S.me.om); }
+function cabNew(){ return CABO.filter(function(r){ return r.status === 'new' && cabMine(r); }); }
 function cabBar(){
   var b = $('cabbar'); if (!b) return;
   var n = cabNew();
@@ -1388,7 +1391,7 @@ function cabBar(){
     esc(n.slice(0,3).map(function(r){ return r.client; }).join(', '))+(n.length>3?'…':'')+'</small></span><button class="btn" onclick="cabList()">Открыть</button></div>' : '';
 }
 function cabList(){
-  var list = CABO.filter(function(r){ return r.status === 'new' || Date.now() - Date.parse(r.created_at) < 7*864e5; });
+  var list = CABO.filter(function(r){ return cabMine(r) && (r.status === 'new' || Date.now() - Date.parse(r.created_at) < 7*864e5); });
   openModal('<h2><span>Заявки клиентов</span><button class="x" onclick="closeModal()">×</button></h2>'+
     (list.length ? list.map(function(r){
       var st = r.status === 'cancelled' ? '<span class="tag gray">отозвана клиентом</span>' : r.status === 'new' ? '<span class="tag warn">ждёт</span>' : r.status === 'done' ? '<span class="tag ok">оформлена · '+esc(fio(r.done_by))+'</span>' : '<span class="tag bad">отклонена · '+esc(fio(r.done_by))+'</span>';
@@ -1510,11 +1513,12 @@ function shipInfo(o){
 function ordByKey(k){ return (S.allOrders || S.orders || []).filter(function(o){ return okey(o) === k; })[0] || null; }
 function keyLabel(k){ var o = ordByKey(k), p = k.split('|'); return o ? esc(o.client)+' от '+dmy(o.date) : esc(p.slice(2).join('|'))+' от '+dmy(p[0]); }
 // значок в списке заказов: «📦 частично 2 из 5» / «📦 отгружен», 🔗 — отгружали вместе с другим заказом
-function shipTag(o, i){
+function shipTag(o, i, sh){ // sh — коротко (для таблицы), полный текст во всплывающей подсказке
   if (!SHIP.length) return '';
   var s = shipInfo(o); if (!s.st) return '';
-  return '<button class="tag '+(s.st==='full'?'ok':'warn')+'" onclick="event.stopPropagation();shipView('+i+')" title="Отгрузки по заказу">📦 '+
-    (s.st==='full' ? 'отгружен' : 'частично, осталось '+(s.lines.length - s.nDone)+' поз.')+(s.with.length?' 🔗':'')+(s.ships.some(function(x){ return !x.paid; }) ? ' · ₽?' : ' · ₽✓')+'</button>';
+  var full = s.st==='full' ? 'отгружен' : 'частично, осталось '+(s.lines.length - s.nDone)+' поз.';
+  return '<button class="tag '+(s.st==='full'?'ok':'warn')+'" onclick="event.stopPropagation();shipView('+i+')" title="Отгрузки по заказу: '+full+'">📦 '+
+    (sh ? (s.st==='full' ? '✓' : 'ещё '+(s.lines.length - s.nDone)) : full)+(s.with.length?' 🔗':'')+(s.ships.some(function(x){ return !x.paid; }) ? ' · ₽?' : ' · ₽✓')+'</button>';
 }
 // блок «Отгрузки» в окне заказа
 function shipSection(i){
