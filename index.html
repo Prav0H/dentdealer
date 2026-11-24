@@ -333,11 +333,43 @@ function fbWatch(){
 var SBC = null, SBLIVE = false, RCH_T = null, HID_AT = 0;
 function sbClient(){
   if (SBC === null){
-    try { SBC = window.supabase && typeof SBCFG !== 'undefined' ? supabase.createClient(SBCFG.url, SBCFG.key, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'dd_sb'}}) : false; }
+    try { SBC = window.supabase && typeof SBCFG !== 'undefined' ? supabase.createClient(SBCFG.url, SBCFG.key, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'dd_sb'}, global:{fetch: sbFetch}}) : false; }
     catch(e){ console.warn('sb', e); SBC = false; }
   }
   return SBC || null;
 }
+// v66: пропуск в базу протух (вкладка долго спала) или потерялся — запись не должна падать с красной ошибкой
+// и не должна тихо уходить только в Google. Отказ базы «нет доступа» → обновляем пропуск (или входим заново) и повторяем один раз.
+function sbFetch(url, opt){
+  var u = String(url && url.url || url);
+  if (u.indexOf('/rest/v1/') < 0) return fetch(url, opt);
+  return fetch(url, opt).then(function(res){
+    if ((res.status !== 401 && res.status !== 403) || !S.me) return res;
+    return sbReauth().then(function(tok){
+      if (!tok) return res;
+      var h = new Headers(opt && opt.headers || {}); h.set('Authorization', 'Bearer ' + tok);
+      return fetch(url, Object.assign({}, opt, {headers: h}));
+    });
+  });
+}
+var SBRA = null;
+function sbReauth(){
+  if (SBRA) return SBRA;
+  var c = sbClient(); if (!c) return Promise.resolve(null);
+  var tok = function(){ return c.auth.getSession().then(function(r){ var s = r && r.data && r.data.session; return s ? s.access_token : null; }); };
+  SBRA = c.auth.refreshSession().then(function(r){
+    if (r && !r.error && r.data && r.data.session) return r.data.session.access_token;
+    return c.auth.signOut({scope: 'local'}).catch(function(){}).then(function(){ return sbSignIn(); }).then(function(ok){ return ok ? tok() : null; });
+  }).catch(function(){ return null; }).then(function(t){ setTimeout(function(){ SBRA = null; }, 5000); return t; });
+  return SBRA;
+}
+// подключение к базе не состоялось (сбой сети при входе, вкладка проснулась) — пробуем ещё раз
+function sbKick(){
+  if (!S.me || S.sbOn || !sbClient()) return;
+  if (SBCH === null) sbOrdersStart();
+  else if (SBCH !== 'wait' && !SBLD) sbLoadOrders(); // канал есть, а данные не пришли (сигналы не доходят) — читаем напрямую
+}
+setInterval(sbKick, 30000);
 function sbLive(){
   var c = sbClient(); if (!c) return;
   if (!SBLIVE){ SBLIVE = true; c.channel('dd-orders').on('broadcast', {event:'chg'}, function(){ remoteChange(); }).subscribe(); }
@@ -369,6 +401,7 @@ function sbOrdersStart(){
   if (SBCH || !S.me) return; SBCH = 'wait';
   sbSignIn().then(function(ok){
     if (!ok){ SBCH = null; return; }
+    setTimeout(function(){ if (!S.sbOn && !SBLD) sbLoadOrders(); }, 8000); // сигналы базы не подключились — данные всё равно читаем
     SBCH = sbClient().channel('dd-ord').on('postgres_changes', {event:'*', schema:'public', table:'orders'}, function(p){
       if (!SBORD) return;
       SBEV_AT = Date.now();
@@ -411,8 +444,10 @@ function sbStop(){
   SBCH = null; SBORD = null; SBTASK = null; SBSTAT = null; S.sbOn = false; SBBH = '';
   if (sbClient()) try { sbClient().auth.signOut(); } catch(e){}
 }
+var SBLD = false;
 function sbLoadOrders(){
   var c = sbClient(), all = [], step = 1000;
+  if (SBLD) return; SBLD = true;
   var page = function(from){
     return c.from('orders').select('id,o').order('id').range(from, from + step - 1).then(function(r){
       if (r.error) throw r.error;
@@ -424,9 +459,9 @@ function sbLoadOrders(){
     var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad(); cabLoad();
     if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
     if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
-    sbApply(); dbLoad();
+    sbApply(); dbLoad(); SBLD = false;
   })
-    .catch(function(e){ console.warn('sb orders', e && e.message); });
+    .catch(function(e){ SBLD = false; console.warn('sb orders', e && e.message); });
 }
 function sbApplySoon(){ clearTimeout(SBAP_T); SBAP_T = setTimeout(sbApply, 150); }
 // Пакет экрана (клиенты, табель, команда, ЗП и т.д.) из базы — вместо Firebase. Берём, если он не старше нашей последней записи
@@ -455,7 +490,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 65, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 66, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -557,7 +592,7 @@ function pullFresh(){
 // телефон проснулся или вернулись на вкладку — сигналы за это время могли пропасть, обновляемся
 document.addEventListener('visibilitychange', function(){
   if (document.hidden){ HID_AT = Date.now(); if (UPD_V) appUpdate(); } // ушли с вкладки — удобный момент обновиться
-  else if (HID_AT && Date.now() - HID_AT > 20000 && S.me && S.token) pullFresh();
+  else { sbKick(); if (HID_AT && Date.now() - HID_AT > 20000 && S.me && S.token) pullFresh(); }
 });
 // все заказы (для поиска, «не оплачены за всё время», периода и истории клиента) — тоже из зеркала
 function fbWatchOrders(){
@@ -612,9 +647,11 @@ var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask
   markLesson:1, submitExam:1, gradeExam:1}; // этап 4
 var BIZERR = /^(Укажите|Сначала|Такая|Напишите|Это не ваш|Создавать|Удалять|Нет доступа|Только)/; // понятные человеку отказы — показываем
 function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
-function opSubmit(fn, args){
+function opSubmit(fn, args, force){
   var ctx = OPCTX; OPCTX = null;
-  var c = sbClient(); if (!c || !S.sbOn || !OPW[fn]) return null;
+  var c = sbClient(); if (!c || !OPW[fn] || !S.me) return null;
+  // v66: база ещё не подключилась — сначала входим в неё, а не отправляем действие только в Google (там его база не увидит)
+  if (!S.sbOn && !force) return sbSignIn().then(function(ok){ sbKick(); if (!ok) throw new Error('нет входа в базу'); OPCTX = ctx; return opSubmit(fn, args, true); });
   var p = {p_fn: fn, p_args: args, p_ord: null, p_del: null, p_task: null, p_tdel: null}, a = args[0];
   if (fn === 'deleteOrder'){ if (a && a.row && a.sheet) p.p_del = a.sheet + ':' + a.row; }
   else if (ctx && ctx.ord){ var o = opClean(ctx.ord); o.id = o.row && o.sheet ? o.sheet + ':' + o.row : 'tmp:' + (o._k || Math.random().toString(16).slice(2,10)); p.p_ord = o; }
@@ -679,7 +716,10 @@ function dbInto(d){
   if (!d) return;
   if (DBX.clients && d.clients) d.clients = DBX.clients.map(function(c){ var x = Object.assign({}, c); CFIELDS.forEach(function(k){ if (x[k]==null) x[k]=''; }); x.trade = !!x.trade; x.m = x.m || {}; return x; });
   var p = DBX.plan[d.month]; if (p && d.plan) Object.keys(p).forEach(function(n){ d.plan[n] = p[n]; });
-  var a = DBX.att[d.month]; if (a) d.att = a;
+  var a = DBX.att[d.month]; if (a){ // v66: отметка, сделанная на экране, не пропадает, пока база её ещё не прислала
+    [d.att, S.data && S.data.month === d.month && S.data.att].forEach(function(l){
+      if (l && l.d === a.d && (l.me && !a.me || l.end && !a.end)) a = Object.assign({}, a, {me: a.me || l.me, end: a.end || l.end}); });
+    d.att = a; }
   var z = DBX.salary[d.month]; if (z && d.salary) Object.keys(z).forEach(function(n){ d.salary[n] = z[n]; }); // ЗП — расчёт базы
   if ((p || z) && d.team) d.team = d.team.map(function(t){
     var pl = d.plan[t.name], sl = d.salary && d.salary[t.name], x = {};
@@ -1597,7 +1637,7 @@ function shipSave(){
   });
   if (!items.length){ toast('Отметьте, что отгружаете', true); return; }
   var c = sbClient();
-  if (!c || !S.sbOn){ toast('Нет связи с базой — попробуйте через минуту', true); return; }
+  if (!c || !S.sbOn){ sbKick(); toast('Подключаюсь к базе — нажмите «Отгрузить» ещё раз через несколько секунд', true); return; }
   var row = { date: $('sd_date').value || localToday(), note: $('sd_note').value.trim(), items: items, keys: keys, by_name: fio(S.me.name) || S.me.name };
   var list = SD.list.slice();
   $('sd_go').disabled = true; busy(1);
