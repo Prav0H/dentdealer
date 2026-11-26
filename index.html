@@ -154,6 +154,7 @@ body.wide .wrap,body.wide .hrow{max-width:1500px}.ot td:nth-child(4) .cl,.ot td:
 .seg{display:flex;background:#e9edf3;border-radius:10px;padding:3px;margin:12px 0}
 .seg button{flex:1;border:0;background:none;padding:8px;border-radius:8px;cursor:pointer;color:var(--mute);font-weight:600}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.fsel{flex:0 0 auto;width:auto;max-width:150px;padding:8px 6px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-size:13px;font-weight:600;cursor:pointer}
 .kanban{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;margin:0 -12px;padding-left:12px;padding-right:12px}
 .kcol{flex:0 0 86%;max-width:340px;scroll-snap-align:start;background:#eaeef4;border-radius:14px;padding:10px;min-height:200px}
 @media(min-width:900px){.kcol{flex:1 1 0;max-width:none}}
@@ -380,10 +381,7 @@ function sbLive(){
 // Все свои заказы приходят одним запросом, дальше база сама присылает каждое изменение.
 var SBORD = null, SBCH = null, SBAP_T = null, SBGONE = {}, SBEV_AT = 0, SBTASK = null, SBSTAT = null, SBTGONE = {};
 // данные входа в базу: если в телефоне их нет (вошли давно) или код сменили — берём у сервера по своему входу
-function sbCredsFresh(){
-  if (!S.token) return Promise.resolve(null);
-  return run('sbCreds', [S.token]).then(function(x){ if (x && x.email){ store('dd_fb', JSON.stringify(x)); return x; } return null; }).catch(function(){ return null; });
-}
+function sbCredsFresh(){ return Promise.resolve(null); } // v68: Google не спрашиваем — данные входа есть в телефоне или вводится код
 function sbSignIn(again){
   var c = sbClient(), cr = fbCreds(); if (!c) return Promise.resolve(false);
   if (!cr) return again ? Promise.resolve(false) : sbCredsFresh().then(function(x){ return x ? sbSignIn(true) : false; });
@@ -432,7 +430,7 @@ function sbOrdersStart(){
       SBSTAT[p.new.emp + '|' + p.new.month] = p.new;
       sbApplySoon();
     }).on('postgres_changes', {event:'*', schema:'public', table:'bundles'}, function(p){
-      if (p.new && p.new.emp_id) sbBundleRow({ver: p.new.ver, h: p.new.h}); // сам пакет берём отдельным запросом
+      // v68: пакеты Google не используются
     }).on('postgres_changes', {event:'*', schema:'public', table:'meta'}, function(p){
       if (p.new && (p.new.key === 'price' || p.new.key === 'kb' || p.new.key === 'promos' || p.new.key === 'contract')) sbMetaLoad(p.new.key);
       else if (p.new && p.new.key === 'appver') appVerCheck(p.new.value && p.new.value.v);
@@ -474,6 +472,7 @@ function sbBundleRow(r){
   try { fbApply(JSON.parse(r.j)); } catch(e){ console.warn('sb bundle', e); }
 }
 function sbLoadBundle(){
+  return; // v68: пакет экрана собирает база (dd_bundle), пакеты Google больше не берём
   var c = sbClient(), cr = fbCreds(); if (!c || !cr) return;
   c.from('bundles').select('ver,h,j').eq('emp_id', cr.id).maybeSingle().then(function(r){ if (!r.error && r.data && r.data.j) sbBundleRow(r.data); });
 }
@@ -490,7 +489,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 67, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 68, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -553,7 +552,7 @@ function sbTasksMerge(local){
 }
 // ЗП, план, неоплаченные и заказы для бонуса из базы — если посчитаны не раньше того, что уже на экране
 function sbStatsInto(d){
-  if (!SBSTAT || !d || !d.salary) return;
+  if (!SBSTAT || !d || !d.salary || d._db) return; // v68: пакет из базы — статистика Google не нужна
   var rep = {};
   Object.keys(SBSTAT).forEach(function(k){
     var r = SBSTAT[k];
@@ -648,7 +647,7 @@ var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask
   saveClient:1, addClientNote:1, saveReport:1, savePlan:1, checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1,
   markLesson:1, submitExam:1, gradeExam:1}; // этап 4
 var BIZERR = /^(Укажите|Сначала|Такая|Напишите|Это не ваш|Создавать|Удалять|Нет доступа|Только|Подождите|Программа обновилась|Заказ не найден)/;
-var NOWAIT = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1}; // записано в базе — Google не ждём
+var NOWAIT = DBOWN; // всё это записано в базе — Google не ждём
 var OFLD = ['mgr','date','status','client','addr','order','disc','sum','dlv','trade','inv','cash','paid','ship','deliv','cdek','comment'];
 function obase(o){ var b = {}; OFLD.forEach(function(f){ b[f] = o[f]; }); return JSON.parse(JSON.stringify(b)); } // понятные человеку отказы — показываем
 function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
@@ -744,8 +743,32 @@ function dbInto(d){
     return Object.assign({}, t, x);
   });
 }
+// v68: экран, вход, сотрудники, акции, договор, личная ссылка — только база
+function sbReady(){ return sbSignIn().then(function(ok){ if (!ok) throw new Error('AUTH'); }); }
+var DBCALL = {
+  boot: function(){ return rpc('dd_boot', {p_month: S.month || ''}); },
+  bundle: function(m){ return rpc('dd_bundle', {p_month: m}); },
+  saveEmployee: function(e){ return rpc('dd_emp_save', {e: e}); },
+  removeEmployee: function(n){ return rpc('dd_emp_remove', {p_name: n}); },
+  resetCode: function(n){ return rpc('dd_emp_code', {p_name: n}); },
+  savePromo: function(x){ return rpc('dd_promo_save', {p: x}); },
+  deletePromo: function(id){ return rpc('dd_promo_del', {p_id: id}); },
+  saveContractTpl: function(d){ return rpc('dd_contract_save', {d: d}); },
+  myLink: function(){ return rpc('dd_link_make', {p_key: null}).then(function(k){ return location.origin + location.pathname + '?k=' + k; }); }
+};
+function dbCall(fn, args){
+  var bg0 = fn === 'boot' || fn === 'bundle'; if (!bg0) busy(1);
+  return sbReady().then(function(){ return DBCALL[fn].apply(null, args); }).then(function(x){ if (!bg0) busy(-1); return x; }, function(e){
+    if (!bg0) busy(-1);
+    var m = String(e && e.message || e).replace(/^(Error|Exception):\s*/, '');
+    if (/AUTH|JWT|not authenticated/i.test(m)){ showLogin(); throw new Error('Войдите заново'); }
+    if (!bg0) toast(m, true);
+    throw new Error(m);
+  });
+}
 function api(fn){
   var args = Array.prototype.slice.call(arguments, 1);
+  if (DBCALL[fn] && sbClient()) return dbCall(fn, args);
   if (DBREAD[fn] && S.sbOn && sbClient()) return DBREAD[fn].apply(null, args).catch(function(e){ console.warn('db read', fn, e && e.message); return apiGas.apply(null, [fn].concat(args)); });
   return apiGas.apply(null, [fn].concat(args));
 }
@@ -770,7 +793,8 @@ function apiGas(fn){
 // Сохранение в фоне: экран уже обновлён, при ошибке — сообщение и свежие данные с сервера.
 function bg(fn){
   var args = Array.prototype.slice.call(arguments);
-  return api.apply(null, args).then(function(x){ refresh(); return x; }).catch(function(){ refresh(); });
+  var db = DBOWN[fn] && S.sbOn; // изменения из базы приходят сами — у Google ничего не спрашиваем
+  return api.apply(null, args).then(function(x){ if (!db) refresh(); return x; }).catch(function(){ if (db) sbLoadOrders(); else refresh(); });
 }
 
 // ---------- данные ----------
@@ -782,6 +806,9 @@ function norm(d){
 }
 function setData(d){
   norm(d);
+  var was = S.cache[d.month]; // v68: пакет из базы без заказов и задач — пока они не пришли, показываем сохранённые
+  if (d._db && !SBORD && was && was.orders) d.orders = was.orders;
+  if (d._db && !SBTASK && was && was.tasks) d.tasks = was.tasks;
   if (SBORD && d.orders) d.orders = sbMerge(sbMonth(d.month), (S.cache[d.month] && S.cache[d.month].orders) || d.orders, d.month); // заказы — из базы
   if (SBTASK && d.tasks) d.tasks = sbTasksMerge((S.cache[d.month] && S.cache[d.month].tasks) || d.tasks); // задачи — из базы
   if (d._ver == null) d._ver = S.ver || 0; // с какой версией данных пришло (ЗП из базы старее — не подменяем)
@@ -834,7 +861,7 @@ function saveTgToken(){
 
 // Личная ссылка: открыв её один раз и добавив на экран «Домой», код больше вводить не нужно.
 function showMyLink(){
-  api('myLink').then(function(u){ return GAS ? u : location.origin + location.pathname + '?k=' + String(u).split('?k=')[1]; }).then(function(url){
+  api('myLink').then(function(url){
     openModal('<h2><span>Вход без кода</span><button class="x" onclick="closeModal()">×</button></h2>'+
       '<div style="line-height:1.5">Это ваша личная ссылка. Откройте её и добавьте на экран «Домой» — программа будет открываться сразу, без кода.<br><br>'+
       '<b>iPhone:</b> откройте ссылку в Safari → кнопка «Поделиться» → «На экран Домой».<br><b>Android:</b> откройте в Chrome → меню ⋮ → «Добавить на главный экран».<br><br>'+
@@ -845,14 +872,23 @@ function showMyLink(){
 function doLogin(){
   var c = $('code').value.trim(); $('lerr').textContent='';
   if(!c) return;
-  api('login', c).then(function(r){
-    var tok = typeof r === 'string' ? r : r.tok; S.token = tok; store('dd_tok', tok);
-    var p = r && r.id ? fbLogin(r.id, c.replace(/\D/g, '')) : Promise.resolve(false); // сервер берёт из кода только цифры
-    p.then(function(){ start(); setTimeout(showMyLink, 1500); });
-  }).catch(function(e){ $('lerr').textContent = e.message; });
+  var cl = sbClient(); if (!cl){ $('lerr').textContent = 'Нет связи с базой — проверьте интернет'; return; }
+  var code = c.replace(/\D/g, '');
+  $('lerr').textContent = 'Вхожу…';
+  cl.auth.signOut({scope: 'local'}).catch(function(){}).then(function(){ return cl.rpc('dd_login_id', {p_code: code}); }).then(function(r){
+    if (r.error) throw new Error(String(r.error.message || r.error).replace(/^.*?:\s*/, ''));
+    store('dd_fb', JSON.stringify({id: r.data.id, email: r.data.email, pass: 'dd-' + code + '-' + r.data.id}));
+    store('dd_boot', null); S.cache = {};
+    return sbSignIn(true).then(function(ok){
+      if (!ok) throw new Error('Не удалось войти — попробуйте ещё раз');
+      $('lerr').textContent = '';
+      if (URLKEY) cl.rpc('dd_link_make', {p_key: URLKEY}).then(function(){}, function(){}); // старая личная ссылка снова работает
+      start(); if (!URLKEY) setTimeout(showMyLink, 1500);
+    });
+  }).catch(function(e){ $('lerr').textContent = e.message === 'Failed to fetch' ? 'Нет связи с базой — проверьте интернет' : e.message; });
 }
 $('code').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-function doLogout(){ run('logout', [S.token]).catch(function(){}); store('dd_tok', null); store('dd_boot', null); store('dd_fb', null); fbStop(); sbStop(); S.fbLive = false; S.fbGot = false; S.allOrders = null; if (FBA) try { FBA.signOut(); } catch(e){} S.token=''; S.cache={}; $('code').value=''; showLogin(); }
+function doLogout(){ store('dd_tok', null); store('dd_boot', null); store('dd_fb', null); fbStop(); sbStop(); S.fbLive = false; S.fbGot = false; S.allOrders = null; if (FBA) try { FBA.signOut(); } catch(e){} S.token=''; S.cache={}; $('code').value=''; showLogin(); }
 
 function applyBoot(b){
   S.tg=b.tg||{bot:'', linked:false};
@@ -874,7 +910,7 @@ function applyBoot(b){
   var tabs = b.me.role==='Стажёр' ? [['learn','🎓','Обучение']] : [['orders','📦',ordLabel]];
   if (b.me.edit && !b.me.acc) tabs.push(['clients','🏥','Клиенты']); // бухгалтеру — только заказы
   tabs.push(['tasks','✅','Задачи']);
-  if (b.me.sales) tabs.push(['stats','🎯','Итоги']);
+  if (b.me.role!=='Стажёр') tabs.push(['stats','🎯','Итоги']);
   tabs.push(['kb','📚','База']);
   if (b.me.role!=='Стажёр') tabs.push(['learn','🎓','Обучение']);
   tabs.push(['team','👥','Команда']);
@@ -891,10 +927,9 @@ function start(){
   try { saved = JSON.parse(store('dd_boot') || 'null'); } catch(e){}
   if (saved){ applyBoot(saved); useMonthLocal(); }
   var slow = function(){
-    if (S.fbGot) return; // пакет уже пришёл из базы
-    api('boot', priceVer()).then(function(b){
-      if (S.fbGot) return; // зеркало уже всё отдало
+    api('boot').then(function(b){
       var d = b.data; delete b.data;
+      if (!b.tg || !b.tg.bot) b.tg = {bot: S.tg && S.tg.bot || '', linked: b.tg ? b.tg.linked : false}; // имя бота пока знает только Google
       var lite = Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite));
       var first = !S.me;
       applyBoot(b);
@@ -902,11 +937,7 @@ function start(){
       if (first || d.month === S.month) render(); else useMonth();
     }).catch(function(){});
   };
-  // пакет экрана приходит из базы Supabase (вход — при показе сохранённого экрана); не пришёл за 4 с — берём с сервера
-  if (S.me && sbClient()){
-    var timer = setTimeout(slow, 4000), chk = setInterval(function(){ if (S.fbGot){ clearTimeout(timer); clearInterval(chk); } }, 200);
-    setTimeout(function(){ clearInterval(chk); }, 6000);
-  } else slow();
+  slow(); // v68: всё из базы, Google не ждём
 }
 function priceVer(){ try { return JSON.parse(store('dd_price')||'{}').ver || ''; } catch(e){ return ''; } }
 // курс € для формы заказа: торгующей компании — свой
@@ -982,10 +1013,10 @@ function remoteKey(){ var all = S.of==='unpaid' && S.unpaidAll; return Q || all 
 function vOrders(){
   var v=$('view'), keepFocus = document.activeElement && document.activeElement.id==='q';
   if (S.of === undefined) S.of = S.me.role==='Кладовщик' ? 'Создан' : S.me.role==='Курьер' ? 'Собран' : '';
-  var chips = '<div class="seg" style="flex-wrap:wrap">'+OFILTERS().map(function(c){
-    return '<button class="'+(S.of===c[0]?'on':'')+'" onclick="S.of=\''+c[0]+'\';refreshList();vOrdersChips()">'+c[1]+'</button>'; }).join('')+
-    '<button class="'+(S.range?'on':'')+'" onclick="pickRange()">📅 '+(S.range?esc(rangeLabel()):'Период')+'</button></div>';
-  v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск по всем месяцам: клиент, артикул, счёт" value="'+esc(Q)+'">'+(S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+(courier()||S.me.boss?'<button class="btn sec" onclick="routeSheet()">🗺 Маршрут</button>':'')+'</div><div id="ochips">'+chips+'</div><div id="ost"></div><div class="list" id="olist"></div>';
+  v.innerHTML = '<div class="bar"><input id="q" placeholder="Поиск: клиент, артикул, счёт" value="'+esc(Q)+'">'+
+    '<select id="ofilt" class="fsel" title="Фильтр заказов" onchange="ofPick(this.value)">'+ofOptions()+'</select>'+
+    (S.me.edit?'<button class="btn" onclick="editOrder()">+ Заказ</button>':'')+(courier()?'<button class="btn sec" onclick="routeSheet()">🗺 Маршрут</button>':'')+
+    '</div><div id="ost"></div><div class="list" id="olist"></div>';
   var t; $('q').oninput=function(){ clearTimeout(t); t=setTimeout(function(){ Q=$('q').value.trim(); refreshList(); },400); };
   if (keepFocus){ var q=$('q'); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
   v.insertAdjacentHTML('afterbegin', '<div id="cabbar"></div>'); cabBar(); // заявки из кабинета клиентов
@@ -998,7 +1029,7 @@ function refreshList(){
   QKEY = k; QR = null;
   if (S.allOrders && !S.allStale){ QR = filterOrders(S.allOrders); drawOrders(); return; }
   if ($('olist')) $('olist').innerHTML = '<div class="empty">Загружаю…</div>';
-  api('getOrders', {mgr: ocur(), q: Q, unpaid: S.of==='unpaid', from: S.range&&S.range.from, to: S.range&&S.range.to}).then(function(list){ if (k===QKEY){ QR=list; drawOrders(); } }).catch(function(){});
+  sbKick(); setTimeout(function(){ if (k === QKEY){ QKEY = ''; refreshList(); } }, 1500); // заказы из базы ещё не пришли — ждём их
 }
 function rangeLabel(){ var r=S.range; return (r.from?dmy(r.from).slice(0,5):'…')+'–'+(r.to?dmy(r.to).slice(0,5):'…'); }
 function isoOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -1030,11 +1061,7 @@ function drawOrders(){
   var tmode = tableMode();
   if (tmode){ S.tbase = list; list = tableFilter(list); }
   S.orders = list;
-  var sum=0, paid=0, bonus=0;
-  list.forEach(function(o){ sum+=o.sum; if(isPaid(o)){ paid+=o.sum; if(o.bonus) bonus+=o.bonus.sum; } });
-  $('ost').innerHTML = '<div class="stats"><div class="stat"><small>Заказов</small><b>'+list.length+'</b></div><div class="stat"><small>На сумму</small><b>'+money(sum)+'</b></div><div class="stat"><small>Оплачено</small><b>'+money(paid)+'</b></div>'+
-    (mgr&&S.me.sales?'<div class="stat"><small>'+(S.of==='unpaid'?'Бонус после оплаты':'Бонус с оплаченных')+'</small><b>'+money(S.of==='unpaid'?list.reduce(function(a,o){ return a+(o.bonus?o.bonus.sum:0); },0):bonus)+'</b></div>':'')+'</div>' +
-    (S.of==='unpaid'&&!Q&&!S.range?'<div class="note" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(S.unpaidAll?'Неоплаченные за всё время':'Неоплаченные за '+MON[+S.month.slice(5,7)-1].toLowerCase())+
+  $('ost').innerHTML = (S.of==='unpaid'&&!Q&&!S.range?'<div class="note" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(S.unpaidAll?'Неоплаченные за всё время':'Неоплаченные за '+MON[+S.month.slice(5,7)-1].toLowerCase())+
       ' <button class="btn sec sm" onclick="S.unpaidAll=!S.unpaidAll;render();refreshList()">'+(S.unpaidAll?'Только этот месяц':'За всё время')+'</button></div>':
      Q?'<div class="note">Найдено по всем месяцам</div>':S.range?'<div class="note">За период '+esc(rangeLabel())+'</div>':'');
   S.lastTable = tmode;
@@ -1292,7 +1319,16 @@ function delivered(k){
 // Карточка заказа для склада и курьера: адрес, маршрут, звонок, состав и кнопки статуса.
 // фильтры: все, неоплаченные, по статусу (складу и курьеру — их названия)
 function OFILTERS(){ var w = wh(); if (courier()) return [['','Все'],['Собран','К доставке'],['Доставлен','Доставлены']]; return [['','Все'],['unpaid','Не оплачены'],['none','Пустые'],['Создан',w?'К сборке':'Создан'],['Собран',w?'К доставке':'Собран'],['Доставлен',w?'Доставлены':'Доставлен']]; }
-function vOrdersChips(){ var f = OFILTERS(); Array.prototype.forEach.call(document.querySelectorAll('#ochips .seg button'), function(b,k){ if (f[k]) b.classList.toggle('on', f[k][0]===S.of); }); }
+function ofOptions(){
+  var o = OFILTERS().map(function(c){ return '<option value="f:'+c[0]+'"'+(!S.range && S.of===c[0]?' selected':'')+'>'+(c[0]?'⚲ ':'☰ ')+c[1]+'</option>'; }).join('');
+  return o + (S.range ? '<option value="r" selected>📅 '+esc(rangeLabel())+'</option><option value="x">✕ Сбросить период</option>' : '<option value="r">📅 Период…</option>');
+}
+function ofPick(v){
+  if (v === 'r'){ $('ofilt').innerHTML = ofOptions(); pickRange(); return; }
+  if (v === 'x'){ setRange('', ''); return; }
+  S.of = v.slice(2); refreshList(); vOrdersChips();
+}
+function vOrdersChips(){ if ($('ofilt')) $('ofilt').innerHTML = ofOptions(); }
 // ---------- оплата отгрузок и бонус по ним ----------
 // Бонус менеджера = бонус заказа × доля отгруженного (по стоимости позиций); идёт в месяц, когда нажали «Оплачено».
 var SHIP_ZP_FROM = '2026-12'; // с этого месяца ЗП считается по оплаченным отгрузкам
@@ -2257,10 +2293,24 @@ function savePlan(){
 
 // ---------- итоги: план и зарплата ----------
 function vStats(){
-  var t = S.statTab || 'plan';
-  var seg = '<div class="seg"><button class="'+(t==='plan'?'on':'')+'" onclick="S.statTab=\'plan\';render()">План и отчёт</button><button class="'+(t==='salary'?'on':'')+'" onclick="S.statTab=\'salary\';render()">Зарплата</button></div>';
-  if (t === 'salary') vSalary(); else vPlan();
+  var t = S.statTab || (S.me.sales ? 'plan' : 'orders'); if (!S.me.sales) t = 'orders';
+  var b = function(k, l){ return '<button class="'+(t===k?'on':'')+'" onclick="S.statTab=\''+k+'\';render()">'+l+'</button>'; };
+  var seg = '<div class="seg">'+(S.me.sales ? b('plan','План и отчёт')+b('salary','Зарплата') : '')+b('orders','Заказы')+'</div>';
+  if (t === 'orders') vOrdStats(); else if (t === 'salary') vSalary(); else vPlan();
   $('view').insertAdjacentHTML('afterbegin', seg);
+}
+// Цифры по заказам месяца (раньше были над списком заказов)
+function vOrdStats(){
+  var mgr = ocur(), all = (S.data.orders || []).filter(function(o){ return !mgr || o.mgr === mgr; });
+  var cnt = function(f){ return all.filter(f).length; }, sum = function(l){ return l.reduce(function(a,o){ return a + (+o.sum||0); }, 0); };
+  var paid = all.filter(function(o){ return o.paid; }), unp = all.filter(function(o){ return !o.paid; });
+  var bon = function(l){ return l.reduce(function(a,o){ return a + (o.bonus ? +o.bonus.sum||0 : 0); }, 0); };
+  var st = function(k, v){ return '<div class="stat"><small>'+k+'</small><b>'+v+'</b></div>'; };
+  $('view').innerHTML = '<div class="note">'+(mgr ? 'Заказы: '+esc(fio(mgr)) : 'Все заказы')+' · '+MON[+S.month.slice(5,7)-1].toLowerCase()+'</div>'+
+    '<div class="stats">'+st('Заказов', all.length)+st('На сумму', money(sum(all)))+st('Оплачено', money(sum(paid)))+st('Не оплачено', money(sum(unp)))+'</div>'+
+    '<div class="stats">'+st('Без статуса', cnt(function(o){ return !o.status; }))+st('Создан', cnt(function(o){ return o.status==='Создан'; }))+
+      st('Собран', cnt(function(o){ return o.status==='Собран'; }))+st('Доставлен', cnt(function(o){ return o.status==='Доставлен'; }))+'</div>'+
+    (S.me.sales ? '<div class="stats">'+st('Бонус с оплаченных', money(bon(paid)))+st('Бонус после оплаты', money(bon(unp)))+'</div>' : '');
 }
 
 // ---------- задачи: доска по статусам ----------
@@ -2978,7 +3028,7 @@ function removeEmp(name){
 function restoreEmp(i){ var e=S.emps[i]; toast('Возвращаю…'); api('saveEmployee', {name:e.name, role:e.role, email:e.email, phone:e.phone, salary:'', qbonus:''}).then(function(){ toast('Сотрудник возвращён'); refreshTeam(); }).catch(function(){}); }
 function newCode(name){ api('resetCode', name).then(function(c){ closeModal(); toast('Новый код для '+name+': '+c); refreshTeam(); }).catch(function(){}); }
 function refreshTeam(){
-  api('boot', priceVer()).then(function(b){ var d=b.data; delete b.data; var lite=Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite)); applyBoot(b); if (d.month===S.month) setData(d); render(); refresh(); });
+  api('boot').then(function(b){ var d=b.data; delete b.data; if (!b.tg || !b.tg.bot) b.tg = {bot: S.tg && S.tg.bot || '', linked: b.tg ? b.tg.linked : false}; var lite=Object.assign({}, b); delete lite.price; store('dd_boot', JSON.stringify(lite)); applyBoot(b); if (d.month===S.month) setData(d); render(); refresh(); });
 }
 // подтверждение без системного окна confirm()
 function confirmBox(text, ok){
@@ -2989,9 +3039,20 @@ function confirmBox(text, ok){
 function openModal(html){ $('sheet').innerHTML=html; $('modal').classList.remove('hidden'); document.body.style.overflow='hidden'; }
 function closeModal(){ $('modal').classList.add('hidden'); document.body.style.overflow=''; }
 
-S.token = URLKEY || store('dd_tok') || '';
-if (URLKEY) store('dd_tok', URLKEY);
-if (S.token) start(); else showLogin();
+// v68: вход — данными базы из телефона; по личной ссылке ?k= — база выдаёт их сама; иначе — код
+S.token = store('dd_tok') || '';
+(function(){
+  var cl = sbClient(), go = function(){ if (fbCreds()) start(); else showLogin(); };
+  if (!URLKEY || !cl) return go();
+  cl.rpc('dd_link_login', {p_key: URLKEY}).then(function(r){
+    var x = r && !r.error && r.data;
+    if (x && x.id){
+      var cur = fbCreds();
+      if (!cur || cur.id !== x.id || cur.pass !== x.pass){ store('dd_fb', JSON.stringify(x)); store('dd_boot', null); try { cl.auth.signOut({scope: 'local'}); } catch(e){} }
+    }
+    go();
+  }, go);
+})();
 </script>
 </body>
 </html>
