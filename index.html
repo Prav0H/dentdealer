@@ -406,7 +406,7 @@ function sbOrdersStart(){
       if (!SBORD) return;
       SBEV_AT = Date.now();
       if (p.eventType === 'DELETE'){ if (p.old && p.old.id) delete SBORD[p.old.id]; }
-      else if (p.new && p.new.id) SBORD[p.new.id] = p.new.o;
+      else if (p.new && p.new.id){ p.new.o._id = p.new.id; SBORD[p.new.id] = p.new.o; }
       sbApplySoon();
     }).on('postgres_changes', {event:'*', schema:'public', table:'tasks'}, function(p){
       if (!SBTASK) return;
@@ -456,7 +456,7 @@ function sbLoadOrders(){
     });
   };
   return Promise.all([page(0), c.from('tasks').select('id,o'), c.from('emp_stats').select('emp,month,ver,v')]).then(function(r){
-    var m = {}; r[0].forEach(function(x){ m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad(); cabLoad();
+    var m = {}; r[0].forEach(function(x){ x.o._id = x.id; m[x.id] = x.o; }); SBORD = m; S.sbOn = true; shipLoad(); cabLoad();
     if (!r[1].error){ var t = {}; (r[1].data || []).forEach(function(x){ t[x.id] = x.o; }); SBTASK = t; }
     if (!r[2].error){ var st = {}; (r[2].data || []).forEach(function(x){ st[x.emp + '|' + x.month] = x; }); SBSTAT = st; }
     sbApply(); dbLoad(); SBLD = false;
@@ -490,7 +490,7 @@ function sbMetaLoad(k){
   });
 }
 // ---------- новая версия программы — обновляемся сами ----------
-var APPV = 66, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
+var APPV = 67, UPD_V = 0, UPD_T = null; // APPV — номер этой версии экрана; в базе meta.appver — номер последней выпущенной
 function appVerCheck(v){ v = +v || 0; if (v <= APPV || v === UPD_V) return; UPD_V = v; updBar(); appUpdate(); }
 function updUrl(){
   if (GAS) return API_URL + (URLKEY ? '?k=' + encodeURIComponent(URLKEY) : '');
@@ -514,7 +514,9 @@ function appUpdate(){
   try { if (GAS) window.top.location.href = updUrl(); else location.replace(updUrl()); } catch(e){}
 }
 setInterval(function(){ if (SBCH && SBCH !== 'wait') sbMetaLoad('appver'); }, 5*60000);
-function byDateRow(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); }
+function oid(o){ return o._id || (o.sheet+':'+o.row); } // постоянный номер заказа в базе
+function addedKey(o){ return o._at ? 1e13 + o._at : o.row && o.sheet !== 'tmp' && o.sheet !== 'db' ? sheetKey(o.sheet)*100000 + o.row : 1e12; }
+function byDateRow(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : addedKey(b) - addedKey(a); }
 // заказы месяца — как их отдаёт сервер: за месяц по дате; курьеру ещё и все собранные
 function sbMonth(month){
   var cour = courier();
@@ -524,15 +526,15 @@ function sbMonth(month){
 }
 // заказы, которые этот экран только что изменил и ещё записывает, — показываем свою версию, пока база не догонит
 function sbMerge(list, local, month){
-  var now = Date.now(), k2 = function(o){ return o.sheet + ':' + o.row; };
+  var now = Date.now(), k2 = oid;
   Object.keys(SBGONE).forEach(function(k){ if (now - SBGONE[k] > 30000) delete SBGONE[k]; });
   var keep = (local||[]).filter(function(x){ return x.saving || (x._t && now - x._t < 15000); });
-  var byKey = {}; keep.forEach(function(x){ if (x.row) byKey[k2(x)] = x; });
+  var byKey = {}; keep.forEach(function(x){ if (x._id || x.row) byKey[k2(x)] = x; });
   var out = list.filter(function(o){ return !SBGONE[k2(o)]; }).map(function(o){ return byKey[k2(o)] || o; });
   keep.forEach(function(x){
     if (out.indexOf(x) >= 0) return;
     if (!courier() && String(x.date||'').slice(0,7) !== month) return;
-    if (x.row){ out.unshift(x); return; }
+    if (x._id && !/^tmp:/.test(x._id) || x.row){ out.unshift(x); return; }
     // новый заказ ещё записывается: если его копия из базы уже пришла — показываем один
     // своя копия — по временному номеру заказа (_k); по «дата|менеджер|клиент» нельзя: у клиента в день бывает несколько заказов
     var i = out.findIndex(function(o){ return x._k ? o._k === x._k : (!o.saving && !o._t && o.mgr === x.mgr && o.client === x.client && o.date === x.date); });
@@ -631,7 +633,7 @@ function filterOrders(all){
     if (q && [o.client,o.order,o.inv,o.addr,o.cdek].join(' ').toLowerCase().indexOf(q) < 0) return false;
     return true;
   });
-  list.sort(function(a,b){ return a.date!==b.date ? (a.date<b.date?1:-1) : (a.sheet===b.sheet ? b.row-a.row : 0); });
+  list.sort(byDateRow);
   return list.slice(0, 800);
 }
 function nkeyJs(s){ var k = ' '+String(s||'').toLowerCase().replace(/[«»"'“”„]/g,'').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ')+' '; for (var i=0;i<2;i++) k = k.replace(/ (ооо|ип|ао|зао|оао|пао|новый клиент|новые клиенты) /g,' '); return k.replace(/\s+/g,' ').trim(); }
@@ -645,7 +647,10 @@ var OPCTX = null;
 var DBOWN = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1, // главные в базе (этап 3)
   saveClient:1, addClientNote:1, saveReport:1, savePlan:1, checkIn:1, endDay:1, saveKb:1, deleteKb:1, saveKbFolder:1, deleteKbFolder:1,
   markLesson:1, submitExam:1, gradeExam:1}; // этап 4
-var BIZERR = /^(Укажите|Сначала|Такая|Напишите|Это не ваш|Создавать|Удалять|Нет доступа|Только)/; // понятные человеку отказы — показываем
+var BIZERR = /^(Укажите|Сначала|Такая|Напишите|Это не ваш|Создавать|Удалять|Нет доступа|Только|Подождите|Программа обновилась|Заказ не найден)/;
+var NOWAIT = {saveOrder:1, setOrderState:1, deleteOrder:1, saveTask:1, deleteTask:1}; // записано в базе — Google не ждём
+var OFLD = ['mgr','date','status','client','addr','order','disc','sum','dlv','trade','inv','cash','paid','ship','deliv','cdek','comment'];
+function obase(o){ var b = {}; OFLD.forEach(function(f){ b[f] = o[f]; }); return JSON.parse(JSON.stringify(b)); } // понятные человеку отказы — показываем
 function opClean(o){ var x = Object.assign({}, o); delete x.saving; delete x._t; return x; }
 function opSubmit(fn, args, force){
   var ctx = OPCTX; OPCTX = null;
@@ -653,8 +658,19 @@ function opSubmit(fn, args, force){
   // v66: база ещё не подключилась — сначала входим в неё, а не отправляем действие только в Google (там его база не увидит)
   if (!S.sbOn && !force) return sbSignIn().then(function(ok){ sbKick(); if (!ok) throw new Error('нет входа в базу'); OPCTX = ctx; return opSubmit(fn, args, true); });
   var p = {p_fn: fn, p_args: args, p_ord: null, p_del: null, p_task: null, p_tdel: null}, a = args[0];
-  if (fn === 'deleteOrder'){ if (a && a.row && a.sheet) p.p_del = a.sheet + ':' + a.row; }
-  else if (ctx && ctx.ord){ var o = opClean(ctx.ord); o.id = o.row && o.sheet ? o.sheet + ':' + o.row : 'tmp:' + (o._k || Math.random().toString(16).slice(2,10)); p.p_ord = o; }
+  if (fn === 'deleteOrder'){
+    if (!a || !a._id) return Promise.reject(new Error('Подождите пару секунд — загружаю заказы из базы'));
+    p.p_del = '#' + a._id;
+  }
+  else if (ctx && ctx.ord){
+    var o = opClean(ctx.ord); delete o.id;
+    if (!o._id){
+      if (o.row || o.orig || fn !== 'saveOrder') return Promise.reject(new Error('Подождите пару секунд — загружаю заказы из базы'));
+      o._id = 'tmp:' + (o._k || Math.random().toString(16).slice(2,10)); ctx.ord._id = o._id;
+    }
+    if (ctx.base) o._base = ctx.base; // какими поля были до правки — база сохранит только изменённые
+    p.p_ord = o;
+  }
   if (fn === 'saveTask' && a && a.id){
     var loc = (S.data && S.data.tasks || []).filter(function(x){ return x.id === a.id; })[0];
     p.p_task = opClean(Object.assign({}, SBTASK && SBTASK[a.id] || {}, loc || a));
@@ -737,12 +753,12 @@ function apiGas(fn){
   var args = Array.prototype.slice.call(arguments,1);
   busy(1);
   var sub = fn !== 'login' ? opSubmit(fn, args) : null, held = true, rel = function(){ if (held){ held = false; busy(-1); } };
-  var call = sub ? sub.then(function(id){ rel(); return opWait(id).catch(function(e){
+  var call = sub ? sub.then(function(id){ rel(); if (NOWAIT[fn]) return null; return opWait(id).catch(function(e){
       // заказы и задачи главные в базе: сбой Google — только копия в таблице не обновилась, сотруднику это не ошибка
       var m = String(e && e.message || e);
       if (!DBOWN[fn] || /AUTH/.test(m) || BIZERR.test(m.replace(/^(Error|Exception):\s*/, ''))) throw e;
       console.warn('таблица не обновилась', fn, m); return null;
-    }); }, function(e){ console.warn('op', e && e.message); return run(fn, [S.token].concat(args)); })
+    }); }, function(e){ console.warn('op', e && e.message); if (DBOWN[fn]) throw e; return run(fn, [S.token].concat(args)); }) // в Google в обход базы не пишем
     : run(fn, fn === 'login' ? [args[0], URLKEY] : [S.token].concat(args));
   return call.then(function(x){ rel(); return x; }, function(e){
     rel();
@@ -1043,8 +1059,7 @@ function sheetKey(s){
 }
 function byAdded(list){
   return list.slice().sort(function(a,b){
-    var ra = a.row && a.sheet !== 'tmp' ? sheetKey(a.sheet)*100000 + a.row : 1e12, rb = b.row && b.sheet !== 'tmp' ? sheetKey(b.sheet)*100000 + b.row : 1e12;
-    return rb - ra;
+    return addedKey(b) - addedKey(a);
   });
 }
 var TCOLS = [['date','Дата','d'],['mgr','Менеджер'],['client','Клиент'],['addr','Адрес'],['order','Заказ'],['disc','Скидка'],['sum','Сумма'],['trade','Торг.'],
@@ -1092,7 +1107,7 @@ function trSet(k, on){
 }
 function tableFilter(list){
   list = list.filter(function(o){ return tpass(o); });
-  if (TS){ var f = TS.f, d = TS.dir, ak = function(o){ return o.row && o.sheet !== 'tmp' ? sheetKey(o.sheet)*100000 + o.row : 1e12; };
+  if (TS){ var f = TS.f, d = TS.dir, ak = addedKey;
     list = list.slice().sort(function(a,b){ var x = a[f]||'', y = b[f]||''; if (!x !== !y) return x ? -1 : 1; if (x < y) return -d; if (x > y) return d;
       var p = ak(a), q = ak(b); return p < q ? -d : p > q ? d : 0; }); } // одинаковые — по порядку внесения
   return list;
@@ -1201,11 +1216,11 @@ function cellEdit(ev, i, f){
 }
 // Записать изменённые поля заказа: экран обновляется сразу, таблица — в фоне (как при сохранении формы).
 function patchOrder(o, patch){
-  var orig = {mgr:o.mgr, client:o.client, date:o.date};
+  var orig = {mgr:o.mgr, client:o.client, date:o.date}, base = obase(o);
   Object.assign(o, patch); shipRekey(okey(orig), okey(o)); o.saving = true; redrawOrder(o);
   var p = { row:o.row, sheet:o.sheet, orig:orig, mgr:o.mgr, date:o.date, status:o.status, client:o.client, addr:o.addr, order:o.order,
     disc:Math.round((o.disc||0)*10000)/100, sum:o.sum, dlv:o.dlv, trade:!!o.trade, inv:o.inv, cash:o.cash, paid:!!o.paid, ship:o.ship, deliv:o.deliv, cdek:o.cdek, comment:o.comment };
-  afterSave(o, function(){ return api('saveOrder', p); }).then(function(pos){
+  afterSave(o, function(){ return api('saveOrder', p); }, base).then(function(pos){
     if (pos && pos.row){ o.row = pos.row; o.sheet = pos.sheet; }
     o.saving = false; redrawOrder(o); toast('Сохранено'); refresh();
   }).catch(function(){ refresh(); });
@@ -1240,7 +1255,7 @@ function routeButton(addr){
 // Маршрутный лист курьера: собранные заказы с адресом, на сегодня — отмечены, порядок можно менять,
 // одна кнопка открывает весь маршрут в Яндекс Картах (от текущего места по всем точкам).
 var RS = { order: [], sel: {} };
-function rk(o){ return o.sheet+':'+o.row; }
+function rk(o){ return oid(o); }
 function routeList(){ return (S.data.orders||[]).filter(function(o){ return o.status==='Собран' && isAddr(addrLine(o.addr)); }); }
 function routeSheet(){
   var list = routeList(), keys = list.map(rk);
@@ -1269,8 +1284,8 @@ function routeSheet(){
 function moveRoute(n, d){ var k = RS.order.splice(n,1)[0]; RS.order.splice(n+d,0,k); routeSheet(); }
 function delivered(k){
   var o = (S.data.orders||[]).filter(function(x){ return rk(x)===k; })[0]; if (!o) return;
-  o.status = 'Доставлен'; if (!o.deliv) o.deliv = S.today;
-  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:'Доставлен', paid:null}); });
+  var base = obase(o); o.status = 'Доставлен'; if (!o.deliv) o.deliv = S.today;
+  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:'Доставлен', paid:null}); }, base);
   toast('Заказ «'+o.client+'» доставлен'); routeSheet();
 }
 
@@ -1509,9 +1524,9 @@ function cabCancelOrder(id){
   if (!o){ toast('Заказ не найден — возможно, его уже удалили', true); cabDone(id, 'done', 'Заказ отменён'); return; }
   confirmBox('Удалить заказ «'+o.client+'» от '+dmy(o.date)+' на '+money(o.sum)+' по просьбе клиента? Строка удалится из таблицы.', function(){
     S.data.orders = (S.data.orders||[]).filter(function(x){ return x !== o; });
-    if (o.row) SBGONE[o.sheet+':'+o.row] = Date.now();
+    SBGONE[oid(o)] = Date.now();
     closeModal(); render(); toast('Заказ удалён, клиент увидит, что отмена принята');
-    afterSave(o, function(){ return bg('deleteOrder', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}}); });
+    afterSave(o, function(){ return bg('deleteOrder', {_id:o._id, row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}}); });
     cabDone(id, 'done', 'Заказ отменён');
   });
 }
@@ -1542,16 +1557,18 @@ function shipLines(o){
   });
   return out;
 }
+function shipHas(s, o){ return s.oids && s.oids.length ? s.oids.indexOf(o._id) >= 0 : (s.keys||[]).indexOf(okey(o)) >= 0; }
+function shipMine(it, o){ return it.oid ? it.oid === o._id : it.k === okey(o); }
 function shipInfo(o){
-  var k = okey(o), ships = SHIP.filter(function(s){ return (s.keys||[]).indexOf(k) >= 0; });
+  var k = okey(o), ships = SHIP.filter(function(s){ return shipHas(s, o); });
   var lines = shipLines(o), done = {};
-  ships.forEach(function(s){ (s.items||[]).forEach(function(it){ if (it.k === k){ var a = String(it.art).toLowerCase()+'|'+(it.unit||''); done[a] = (done[a]||0) + num(it.qty); } }); });
+  ships.forEach(function(s){ (s.items||[]).forEach(function(it){ if (shipMine(it, o)){ var a = String(it.art).toLowerCase()+'|'+(it.unit||''); done[a] = (done[a]||0) + num(it.qty); } }); });
   lines.forEach(function(l){ var a = l.art.toLowerCase()+'|'+l.unit, d = Math.min(l.qty, done[a]||0); l.done = d; done[a] = (done[a]||0) - d; l.left = Math.max(0, Math.round((l.qty - d)*100)/100); });
   var full = lines.length > 0 && lines.every(function(l){ return !l.left; });
-  var w = {}; ships.forEach(function(s){ (s.keys||[]).forEach(function(x){ if (x !== k) w[x] = 1; }); });
+  var w = {}; ships.forEach(function(s){ (s.oids && s.oids.length ? s.oids.map(function(x){ return '#'+x; }) : s.keys||[]).forEach(function(x){ if (x !== k && x !== '#'+o._id) w[x] = 1; }); });
   return { k: k, lines: lines, ships: ships, st: !ships.length ? '' : full ? 'full' : 'part', with: Object.keys(w), nDone: lines.filter(function(l){ return !l.left; }).length };
 }
-function ordByKey(k){ return (S.allOrders || S.orders || []).filter(function(o){ return okey(o) === k; })[0] || null; }
+function ordByKey(k){ return (S.allOrders || S.orders || []).filter(function(o){ return k.charAt(0) === '#' ? '#'+o._id === k : okey(o) === k; })[0] || null; }
 function keyLabel(k){ var o = ordByKey(k), p = k.split('|'); return o ? esc(o.client)+' от '+dmy(o.date) : esc(p.slice(2).join('|'))+' от '+dmy(p[0]); }
 // значок в списке заказов: «📦 частично 2 из 5» / «📦 отгружен», 🔗 — отгружали вместе с другим заказом
 function shipTag(o, i, sh){ // sh — коротко (для таблицы), полный текст во всплывающей подсказке
@@ -1572,7 +1589,7 @@ function shipSection(i){
         (l.unit ? fmtQ(l.done)+' из '+fmtQ(l.qty)+' '+l.unit : (l.left ? 'не отгружено' : 'отгружено'))+(l.left?'':' ✓')+'</span></div>';
     }).join('');
     h += s.ships.map(function(x){
-      var mine = (x.items||[]).filter(function(it){ return it.k === s.k; }), other = (x.keys||[]).filter(function(k){ return k !== s.k; });
+      var mine = (x.items||[]).filter(function(it){ return shipMine(it, o); }), other = x.oids && x.oids.length ? x.oids.filter(function(id){ return id !== o._id; }).map(function(id){ return '#'+id; }) : (x.keys||[]).filter(function(k){ return k !== s.k; });
       return '<div class="note" style="border-top:1px solid var(--line);padding-top:6px">Отгрузка №'+x.id+' от '+dmy(x.date)+(x.by_name?' · '+esc(x.by_name):'')+'<br>'+
         mine.map(function(it){ return esc(it.art)+(it.unit?' — '+fmtQ(it.qty)+' '+it.unit:''); }).join(', ')+
         (other.length ? '<br>🔗 вместе с: '+other.map(keyLabel).join('; ') : '')+(x.note ? '<br>'+esc(x.note) : '')+
@@ -1613,10 +1630,10 @@ function sdDraw(){
   sdMore();
 }
 function sdMore(){
-  var q = ($('sd_q') ? $('sd_q').value : '').trim().toLowerCase(), keys = SD.list.map(okey), c0 = SD.list[0].client;
+  var q = ($('sd_q') ? $('sd_q').value : '').trim().toLowerCase(), keys = SD.list.map(oid), c0 = SD.list[0].client;
   var all = S.allOrders || S.orders || [];
   var res = all.filter(function(o){
-    if (!o.client || keys.indexOf(okey(o)) >= 0 || o.status === 'Доставлен' || shipInfo(o).st === 'full') return false;
+    if (!o.client || keys.indexOf(oid(o)) >= 0 || o.status === 'Доставлен' || shipInfo(o).st === 'full') return false;
     return q ? (o.client+' '+o.order).toLowerCase().indexOf(q) >= 0 : o.client === c0;
   }).sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 8);
   SD.cand = res;
@@ -1625,20 +1642,21 @@ function sdMore(){
   }).join('')+'</div>' : '<div class="note">'+(q ? 'Ничего не нашлось' : 'Других неотгруженных заказов этого клиента нет — найдите нужный заказ поиском')+'</div>';
 }
 function shipSave(){
-  var items = [], keys = [];
+  var items = [], keys = [], oids = [];
+  if (SD.list.some(function(o){ return !o._id || o.saving === true; })){ toast('Заказ ещё записывается — нажмите «Отгрузить» через пару секунд', true); return; }
   SD.list.forEach(function(o, n){
     var s = shipInfo(o), k = okey(o), any = false;
     s.lines.forEach(function(l, j){
       var cb = document.querySelector('#sd_list input[data-o="'+n+'"][data-j="'+j+'"]'); if (!cb || !cb.checked || !l.left) return;
       var qi = document.querySelector('#sd_list input[data-q="'+n+'_'+j+'"]'), q = l.unit ? Math.min(num(qi && qi.value), l.left) : 1;
-      if (q > 0){ items.push({k: k, art: l.art, qty: q, unit: l.unit}); any = true; }
+      if (q > 0){ items.push({k: k, oid: o._id, art: l.art, qty: q, unit: l.unit}); any = true; }
     });
-    if (any) keys.push(k);
+    if (any){ keys.push(k); oids.push(o._id); }
   });
   if (!items.length){ toast('Отметьте, что отгружаете', true); return; }
   var c = sbClient();
   if (!c || !S.sbOn){ sbKick(); toast('Подключаюсь к базе — нажмите «Отгрузить» ещё раз через несколько секунд', true); return; }
-  var row = { date: $('sd_date').value || localToday(), note: $('sd_note').value.trim(), items: items, keys: keys, by_name: fio(S.me.name) || S.me.name };
+  var row = { date: $('sd_date').value || localToday(), note: $('sd_note').value.trim(), items: items, keys: keys, oids: oids, by_name: fio(S.me.name) || S.me.name };
   var list = SD.list.slice();
   $('sd_go').disabled = true; busy(1);
   c.from('shipments').insert(row).select().then(function(r){
@@ -1647,7 +1665,7 @@ function shipSave(){
     (r.data||[]).forEach(shipPut);
     closeModal(); toast('Отгрузка №'+(r.data && r.data[0] ? r.data[0].id : '')+' записана');
     // дата отгрузки в заказе (видна в таблице) — если ещё не стоит
-    if (S.me.edit) list.forEach(function(o){ if (keys.indexOf(okey(o)) >= 0 && !o.ship) patchOrder(o, {ship: row.date}); });
+    if (S.me.edit) list.forEach(function(o){ if (oids.indexOf(o._id) >= 0 && !o.ship) patchOrder(o, {ship: row.date}); });
     shipRedraw();
   }, function(e){ busy(-1); $('sd_go').disabled = false; toast('Нет связи с базой', true); });
 }
@@ -1703,19 +1721,19 @@ function statusMenu(i, ev){
 function togglePaid(i, ev){ ev.stopPropagation(); setState(i, null, !S.orders[i].paid); }
 // Заказ ещё записывается в таблицу — следующее действие с ним ждёт окончания записи (человеку ждать не нужно).
 var PEND = {};
-function afterSave(o, fn){
+function afterSave(o, fn, base){
   o._t = Date.now(); // свежая правка: пока база не догнала, на экране — она
   var p = o._k && PEND[o._k];
-  return p ? p.then(function(pos){ if (pos){ o.row = pos.row; o.sheet = pos.sheet; } OPCTX = {ord: o}; return fn(); }) : (OPCTX = {ord: o}, fn());
+  return p ? p.then(function(){ OPCTX = {ord: o, base: base}; return fn(); }) : (OPCTX = {ord: o, base: base}, fn());
 }
 function setState(i, status, paid){
   closeMenu();
-  var o = S.orders[i];
+  var o = S.orders[i], base = obase(o);
   if (status !== null) o.status = status;
   if (paid !== null) o.paid = paid;
   redrawOrder(o);
-  // на сервер уходит только то, что изменили: статус или оплата
-  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:status, paid:paid}); });
+  // в базу уходит только то, что изменили: статус или оплата
+  afterSave(o, function(){ return bg('setOrderState', {row:o.row, sheet:o.sheet, orig:{mgr:o.mgr, client:o.client, date:o.date}, status:status, paid:paid}); }, base);
 }
 
 // Подсказка клиентов: выбрал — подставились адрес, скидка и «торгующая».
@@ -1738,7 +1756,7 @@ function editOrder(i, preset){
   F = o ? JSON.parse(JSON.stringify(o)) : { client:'', addr:'', order:'', disc:0, sum:0, trade:false, inv:'', cash:'', paid:false, status:'', date:S.today, ship:'', deliv:'', cdek:'', comment:'', mgr: ocur() || S.me.om || S.me.name };
   if (preset){ F.client = preset.name; F.addr = preset.addr || lastAddr(preset.name); F.disc = cabFrac(preset.name, preset.disc); F.trade = preset.trade; }
   F.lines=[]; F.extra = F.order;
-  if (o){ F.orig = {mgr:o.mgr, client:o.client, date:o.date}; parseLines(); }
+  if (o){ F.orig = {mgr:o.mgr, client:o.client, date:o.date}; F._base = obase(o); parseLines(); }
   var mgrs = S.sales.indexOf(F.mgr)>=0 ? S.sales : [F.mgr].concat(S.sales); // бухгалтер оформляет и свои заказы
   var mgrSel = S.me.all ? '<label class="f">Менеджер<select id="f_mgr">'+mgrs.map(function(n){ return '<option'+(n===F.mgr?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></label>' : '';
   openModal('<h2><span>'+(o?'Заказ':'Новый заказ')+'</span><button class="x" onclick="closeModal()">×</button></h2>'+
@@ -1893,14 +1911,16 @@ function saveOrder(){
   // сразу показываем заказ в списке, запись в таблицу — в фоне
   var k = F._k || Math.random().toString(16).slice(2,10);
   var shown = JSON.parse(JSON.stringify(o)); shown.disc = o.disc/100; shown.saving = true; shown.bonus = null; shown._k = k;
-  var list = S.data.orders, idx = list.findIndex(function(x){ return (F._k && x._k===F._k) || (o.row && x.row===o.row && x.sheet===o.sheet); });
+  if (F._id) shown._id = F._id; else if (!F.orig) shown._id = 'tmp:' + k; // постоянный номер заказа в базе
+  if (F._at) shown._at = F._at;
+  var list = S.data.orders, idx = list.findIndex(function(x){ return (F._id && x._id===F._id) || (F._k && x._k===F._k) || (!F._id && o.row && x.row===o.row && x.sheet===o.sheet); });
   if (idx >= 0) list[idx] = shown; else if (o.date.slice(0,7) === S.month) list.unshift(shown);
   if (!(S.data.clients||[]).some(function(c){ return c.name.toLowerCase()===o.client.toLowerCase(); }))
     (S.data.clients = S.data.clients||[]).unshift({name:o.client, addr:o.addr, disc:o.disc/100, trade:o.trade, mgr:o.mgr, phone:'', comment:'', n:1, sum:o.sum, last:o.date});
   if (F.orig) shipRekey(okey(F.orig), okey(o)); // отгрузки — вслед за заказом
   if (F.cabReq) cabDone(F.cabReq, 'done', ''); // заявка из кабинета оформлена
   closeModal(); render(); toast('Заказ сохранён');
-  var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; if (form.row){ shown.row = form.row; shown.sheet = form.sheet; } OPCTX = {ord: shown}; return api('saveOrder', o); });
+  var form = F, p = afterSave(form, function(){ o.row = form.row; o.sheet = form.sheet; if (form.row){ shown.row = form.row; shown.sheet = form.sheet; } OPCTX = {ord: shown, base: form._base}; return api('saveOrder', o); });
   p = p.then(function(pos){ return typeof pos === 'number' ? {row: pos} : pos; }); // старый сервер отвечал только номером строки
   PEND[k] = p.then(function(pos){ return pos; }, function(){ return null; });
   p.then(function(pos){
@@ -1911,10 +1931,10 @@ function saveOrder(){
 function delOrder(){
   var o = F;
   confirmBox('Удалить заказ «'+o.client+'» на '+money(o.sum)+'? Строка удалится из таблицы.', function(){
-    S.data.orders = S.data.orders.filter(function(x){ return o._k ? x._k!==o._k : !(x.row===o.row && x.sheet===o.sheet); });
-    if (o.row) SBGONE[o.sheet+':'+o.row] = Date.now(); // пока база не удалила — не показываем
+    S.data.orders = S.data.orders.filter(function(x){ return o._id ? x._id!==o._id : o._k ? x._k!==o._k : !(x.row===o.row && x.sheet===o.sheet); });
+    SBGONE[oid(o)] = Date.now(); // пока база не удалила — не показываем
     closeModal(); render(); toast('Заказ удалён');
-    afterSave(o, function(){ return bg('deleteOrder', {row:o.row, sheet:o.sheet, orig:o.orig}); });
+    afterSave(o, function(){ return bg('deleteOrder', {_id:o._id, row:o.row, sheet:o.sheet, orig:o.orig}); });
   });
 }
 
